@@ -1,0 +1,28 @@
+{
+  "name": "droperx",
+  "version": "1.0.0",
+  "description": "DroperX - Secure P2P File Transfer",
+  "main": "index.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rehankumar554/DroperX.git"
+  },
+  "keywords": [
+    "file-transfer",
+    "webrtc",
+    "p2p",
+    "peer-to-peer"
+  ],
+  "author": "DroperX",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Rehankumar554/DroperX/issues"
+  },
+  "homepage": "https://github.com/Rehankumar554/DroperX#readme",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
