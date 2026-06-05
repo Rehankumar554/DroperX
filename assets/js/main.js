@@ -617,6 +617,26 @@ function finalizeReceive() {
 }
 
 function clearAllFiles() {
+    // Abort active stream to prevent stuck downloads
+    if (fileStream) {
+        try {
+            fileStream.abort("Connection lost or room closed");
+        } catch (e) {
+            console.error("Error aborting stream", e);
+        }
+        fileStream = null;
+    }
+    
+    // Reset memory buffers
+    fileMeta = null;
+    receiveBuffer = [];
+    receivedSize = 0;
+    
+    // Reset flags
+    isTransferring = false;
+    isTransferCancelled = false;
+    isWaitingForAccept = false;
+
     downloadLinksContainer.innerHTML = '';
     sentFilesContainer.innerHTML = '';
     fileInput.value = '';
@@ -627,6 +647,7 @@ function clearAllFiles() {
     sendFileBtn.disabled = true;
     sendProgressContainer.classList.add('hidden');
     receiveProgressContainer.classList.add('hidden');
+    receiveProgressContainer.classList.remove('state-success', 'state-error');
 }
 
 // === FILE TRANSFER LOGIC ===
