@@ -59,6 +59,10 @@
     <link rel="manifest" href="site.webmanifest" />
 
     <link rel="stylesheet" href="assets/css/style.css">
+    <!-- Chart.js for Live Speed Graph -->
+    <script src="assets/js/chart.umd.min.js"></script>
+    <!-- fflate for Zip streaming -->
+    <script src="assets/js/fflate.min.js"></script>
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;800&family=Space+Grotesk:wght@700&display=swap"
         rel="stylesheet">
@@ -188,15 +192,29 @@
 
                 <div class="file-selection hidden" id="file-selection-container">
                     <input type="file" id="file-input" multiple />
-                    <label for="file-input" class="file-label-massive">
-                        <span class="material-symbols-rounded upload-icon">cloud_upload</span>
-                        <span class="title">Click to Select Files</span>
-                        <span class="subtitle">Send multiple files securely over WebRTC</span>
-                    </label>
+                    <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;" />
+                    
+                    <div class="upload-options" style="display: flex; gap: 16px; margin-bottom: 20px;">
+                        <label for="file-input" class="file-label-massive" style="flex: 1;">
+                            <span class="material-symbols-rounded upload-icon">cloud_upload</span>
+                            <span class="title">Select Files</span>
+                        </label>
+                        <label for="folder-input" class="file-label-massive" style="flex: 1; border-color: var(--accent);">
+                            <span class="material-symbols-rounded upload-icon" style="color: var(--accent);">folder_open</span>
+                            <span class="title">Select Folder</span>
+                        </label>
+                    </div>
+
                     <div id="file-details"></div>
                     <button id="send-file-btn" class="btn primary giant" disabled>
-                        <span class="material-symbols-rounded">send</span> Send Files
+                        <span class="material-symbols-rounded">send</span> Send Transfer
                     </button>
+
+                    <!-- Secure Text Drop UI -->
+                    <div class="text-drop-container" style="margin-top: 24px; display: flex; gap: 10px;">
+                        <input type="text" id="textMessageInput" placeholder="Type a secure message, link, or password..." style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-light);" />
+                        <button id="sendTextBtn" class="btn secondary" disabled>Send Text</button>
+                    </div>
                 </div>
 
                 <!-- Transfers Area (Send & Receive) -->
@@ -208,6 +226,13 @@
                         </div>
                         <div class="progress-bar">
                             <div id="send-progress-fill" class="progress-fill"></div>
+                        </div>
+                        <div class="speed-eta-info" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
+                            <span id="send-speed">0 MB/s</span>
+                            <span id="send-eta">--:--</span>
+                        </div>
+                        <div class="chart-container" style="margin-top: 15px; height: 60px;">
+                            <canvas id="sendSpeedChart"></canvas>
                         </div>
                         <div class="transfer-controls">
                             <button id="pause-transfer-btn" class="btn secondary hidden" aria-label="Pause or Resume transfer">
@@ -236,6 +261,13 @@
                         <div class="progress-bar">
                             <div id="receive-progress-fill" class="progress-fill"></div>
                         </div>
+                        <div class="speed-eta-info" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
+                            <span id="receive-speed">0 MB/s</span>
+                            <span id="receive-eta">--:--</span>
+                        </div>
+                        <div class="chart-container" style="margin-top: 15px; height: 60px;">
+                            <canvas id="receiveSpeedChart"></canvas>
+                        </div>
 
                         <div class="download-list-header hidden" id="download-list-header">
                             <h4>Received Files</h4>
@@ -244,6 +276,15 @@
                                     class="material-symbols-rounded">delete</span></button>
                         </div>
                         <div id="download-links-container"></div>
+                    </div>
+
+                    <!-- Received Text Toast -->
+                    <div id="received-text-container" class="hidden" style="margin-top: 20px; padding: 15px; background: rgba(37, 99, 235, 0.1); border-left: 4px solid var(--accent); border-radius: 8px;">
+                        <h4 style="margin-bottom: 8px;">Secure Message Received</h4>
+                        <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                            <p id="received-text-content" style="font-family: monospace; color: var(--text-light); word-break: break-all; margin: 0; flex: 1;"></p>
+                            <button id="copy-text-btn" class="btn primary icon-btn small" style="flex-shrink: 0;" title="Copy Text"><span class="material-symbols-rounded">content_copy</span></button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -289,9 +330,9 @@
     <!-- Custom Tooltip -->
     <div id="custom-tooltip" class="custom-tooltip hidden"></div>
 
-    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="assets/js/peerjs.min.js"></script>
+    <script src="assets/js/qrcode.min.js"></script>
+    <script src="assets/js/html5-qrcode.min.js" type="text/javascript"></script>
     <script src="assets/js/main.js"></script>
 </body>
 

@@ -480,10 +480,15 @@ function setupDataConnection() {
                 fileMeta = parsed;
                 receiveBuffer = [];
                 receivedSize = 0;
+                isTransferCancelled = false;
                 
-                receiveProgressContainer.classList.remove('hidden');
-                receiveProgressContainer.classList.remove('state-error', 'state-success');
-                receiveStatus.innerText = `Receiving: ${sanitizeHTML(fileMeta.name)} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
+                receiveProgressContainer.classList.remove('hidden', 'state-error', 'state-success');
+                if (fileMeta.isZipStream || (fileMeta.type === 'application/zip' && fileMeta.name.endsWith('.zip'))) {
+                    receiveStatus.innerText = `Receiving Folder Zip: ${sanitizeHTML(fileMeta.name)}`;
+                } else {
+                    receiveStatus.innerText = `Receiving: ${sanitizeHTML(fileMeta.name)} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
+                }
+                
                 receiveProgressFill.style.width = '0%';
                 receiveProgressText.innerText = '0%';
                 fileStream = null;
@@ -552,7 +557,7 @@ function setupDataConnection() {
                     receivedSize += decryptedBuffer.byteLength;
                     updateReceiveProgress(receivedSize, fileMeta.size);
                     
-                    if (receivedSize >= fileMeta.size) {
+                    if (receivedSize >= fileMeta.size && !fileMeta.isZipStream) {
                         await fileStream.close();
                         fileStream = null;
                         
@@ -570,7 +575,7 @@ function setupDataConnection() {
                 
                 updateReceiveProgress(receivedSize, fileMeta.size);
 
-                if (receivedSize >= fileMeta.size) {
+                if (receivedSize >= fileMeta.size && !fileMeta.isZipStream) {
                     finalizeReceive();
                 }
             }
@@ -699,12 +704,35 @@ cancelTransferBtn.addEventListener('click', () => {
     }, 3000);
 });
 
+function handleFolderSelection(filesArray) {
+    if (isTransferring) {
+        showToast("Cannot select new files while a transfer is in progress.", "error");
+        return;
+    }
+    if (filesArray.length > 0) {
+        window.isZippingFolder = true;
+        selectedFiles = Array.from(filesArray);
+        const firstPath = selectedFiles[0].webkitRelativePath || "";
+        const folderName = firstPath.split('/')[0] || "Shared_Folder";
+        const totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+        
+        fileDetails.innerText = `Selected Folder: ${folderName} (${selectedFiles.length} files, ~${(totalSize / 1024 / 1024).toFixed(2)} MB)`;
+        window.folderTransferMeta = { name: `${folderName}.zip`, totalSize };
+        sendFileBtn.disabled = false;
+    } else {
+        selectedFiles = [];
+        fileDetails.innerText = "No files selected";
+        sendFileBtn.disabled = true;
+    }
+}
+
 function handleFileSelection(filesArray) {
     if (isTransferring) {
         showToast("Cannot select new files while a transfer is in progress.", "error");
         return;
     }
     if (filesArray.length > 0) {
+        window.isZippingFolder = false;
         selectedFiles = Array.from(filesArray);
         const totalSize = selectedFiles.reduce((acc, file) => acc + file.size, 0);
         fileDetails.innerText = `Selected: ${selectedFiles.length} file(s) (${(totalSize / 1024 / 1024).toFixed(2)} MB)`;
@@ -773,7 +801,11 @@ sendFileBtn.addEventListener('click', () => {
     pauseTransferBtn.classList.remove('hidden');
     currentFileIndex = 0;
     
-    sendNextFile();
+    if (window.isZippingFolder) {
+        sendFolderStream();
+    } else {
+        sendNextFile();
+    }
 });
 
 function sendNextFile() {
@@ -986,4 +1018,86 @@ leaveRoomBtn.addEventListener('click', () => {
 
 function resetUI() {
     clearAllFiles();
+}
+
+
+async function sendFolderStream() {
+    const { name, totalSize } = window.folderTransferMeta;
+    sendStatus.innerText = \Zipping & Transferring Folder: \;
+    sendProgressContainer.classList.remove('state-error', 'state-success');
+    
+    const metadata = {
+        command: 'FILE_METADATA',
+        name: name,
+        size: totalSize,
+        type: 'application/zip',
+        fileIndex: 0,
+        totalFiles: 1,
+        isZipStream: true
+    };
+    dataConnection.send(metadata);
+    isWaitingForAccept = true;
+    sendStatus.innerText = \Initializing transfer: \...\;
+
+    while (isWaitingForAccept && !isTransferCancelled) {
+        await new Promise(r => setTimeout(r, 100));
+    }
+
+    if (isTransferCancelled) return;
+    
+    let offset = 0;
+    
+    const zip = new fflate.Zip((err, dat, final) => {
+        if (err) {
+            console.error(err);
+            return;
+        }
+        if (dat && dat.length > 0) {
+            offset += dat.length;
+            updateSendProgress(offset, totalSize);
+            const chunk = dat.buffer.slice(dat.byteOffset, dat.byteOffset + dat.byteLength);
+            encryptChunk(chunk).then(encrypted => {
+                dataConnection.send(encrypted);
+            });
+        }
+        if (final) {
+            dataConnection.send({ command: 'FILE_DONE' });
+            currentFileIndex = selectedFiles.length; 
+            sendNextFile(); 
+        }
+    });
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+        if (isTransferCancelled) break;
+        const file = selectedFiles[i];
+        const path = file.webkitRelativePath || file.name;
+        
+        const zipStream = new fflate.ZipPassThrough(path);
+        zip.add(zipStream);
+
+        const reader = file.stream().getReader();
+        while (true) {
+            if (isTransferCancelled) break;
+            const { done, value } = await reader.read();
+            if (done) {
+                zipStream.push(new Uint8Array(0), true);
+                break;
+            }
+            while (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
+                await new Promise(r => setTimeout(r, 50));
+            }
+            zipStream.push(value);
+        }
+    }
+    if (!isTransferCancelled) {
+        zip.end();
+    }
+}
+
+
+const folderInput = document.getElementById('folderInput');
+if (folderInput) {
+    folderInput.addEventListener('change', (e) => {
+        handleFolderSelection(e.target.files);
+    });
 }

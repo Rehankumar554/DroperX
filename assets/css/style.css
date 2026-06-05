@@ -1015,3 +1015,35 @@ input[type="file"] {
 .limit-info-text b {
     color: var(--text-primary);
 }
+
+
+/* Desktop Split Layout for Room Screen */
+.desktop-split-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+@media (min-width: 1024px) {
+    .desktop-split-layout {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 32px;
+    }
+    .room-col-left {
+        flex: 1;
+        min-width: 350px;
+        max-width: 450px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        position: sticky;
+        top: 20px;
+    }
+    .room-col-right {
+        flex: 2;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+    }
+}
