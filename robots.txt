@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /pages/legal.html
+
+Sitemap: https://droperx.com/sitemap.xml
