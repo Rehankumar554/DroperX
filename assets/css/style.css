@@ -57,8 +57,12 @@ body {
     background-color: var(--bg-main);
     color: var(--text-primary);
     line-height: 1.5;
-    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh; /* Use dynamic viewport height if supported */
+    overflow: hidden; /* Prevent page-level scrolling completely */
 }
 
 a {
@@ -76,9 +80,6 @@ button {
 
 /* --- Layout Structure --- */
 .navbar {
-    position: fixed;
-    top: 0;
-    left: 0;
     width: 100%;
     height: var(--nav-height);
     display: flex;
@@ -89,7 +90,7 @@ button {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
-    z-index: 100;
+    flex-shrink: 0;
 }
 
 .brand-logo {
@@ -127,42 +128,152 @@ button {
 /* --- Screens --- */
 .screen {
     display: none !important;
+    flex: 1;
     width: 100%;
-    height: 100vh;
-    padding-top: var(--nav-height); /* pushes content below navbar */
+    overflow-y: auto; /* Scroll internally to avoid navbar overlap */
 }
 
 .screen.active {
     display: flex !important; /* Will be overridden by split-layout if needed, but flex is default */
 }
 
-/* --- Split Layout System --- */
-.split-layout {
+/* --- Hero Layout & Flip Card System --- */
+.hero-layout {
     display: flex;
     flex-direction: row;
-    height: 100vh;
+    padding: clamp(20px, 8vh, 120px) 5% 40px; /* Creates flexible vertical spacing instead of exact centering */
+    gap: 40px;
 }
 
-.split-pane {
+.hero-left {
     flex: 1;
     display: flex;
     flex-direction: column;
+    justify-content: flex-start;
+    padding-top: 20px;
+    padding-right: 20px;
+}
+
+.hero-right {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+}
+
+.hero-logo-text {
+    font-size: 3rem; 
+    font-weight: 800; 
+    background: linear-gradient(135deg, var(--accent), #60a5fa); 
+    -webkit-background-clip: text; 
+    -webkit-text-fill-color: transparent;
+}
+
+.hero-title {
+    font-size: clamp(2rem, 4vw + 0.5rem, 3.2rem); 
+    margin: 16px 0; 
+    line-height: 1.1;
+    color: var(--text-primary);
+}
+
+.hero-desc {
+    color: var(--text-secondary); 
+    font-size: 1.1rem; 
+    max-width: 400px; 
+    margin-bottom: 32px;
+}
+
+.hero-right {
+    flex: 1;
+    display: flex;
     justify-content: center;
     align-items: center;
-    padding: 32px;
+    width: 100%;
+}
+
+/* Flip Card 3D Setup */
+.flip-container {
+    perspective: 1000px;
+    width: 100%;
+    max-width: 480px; /* Slightly widened from 440px for a more substantial look */
+    height: 480px; /* Reduced to fit within most standard viewports and prevent scroll */
+}
+
+.flip-card {
+    width: 100%;
+    height: 100%;
     position: relative;
-    border-right: 1px solid var(--border);
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-style: preserve-3d;
+}
+
+.flip-container.flipped .flip-card {
+    transform: rotateY(180deg);
+}
+
+.flip-front, .flip-back {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    backface-visibility: hidden;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 24px 32px; /* Reduced padding to fit the smaller height */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    overflow-y: auto; /* Allow scrolling if content still overflows on small heights */
+}
+
+/* Hide scrollbar for flip faces */
+.flip-front::-webkit-scrollbar, .flip-back::-webkit-scrollbar {
+    display: none;
+}
+.flip-front, .flip-back {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+.flip-back {
+    transform: rotateY(180deg);
+}
+
+/* Toggle Switch Styles */
+.toggle-switch {
+    display: flex;
     background-color: var(--bg-main);
-    transition: background-color 0.3s ease;
+    border-radius: 30px;
+    padding: 4px;
+    margin-bottom: 16px;
+    width: 100%;
 }
 
-.split-pane:last-child {
-    border-right: none;
-    background-color: var(--bg-surface);
+.toggle-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 10px 0;
+    border-radius: 26px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
 }
 
-.split-pane:hover {
-    background-color: var(--bg-hover);
+.toggle-btn.active {
+    color: var(--text-primary);
+    background-color: var(--surface);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.toggle-btn:not(.active):hover {
+    color: var(--text-primary);
 }
 
 .pane-content {
@@ -174,29 +285,44 @@ button {
     display: none !important;
 }
 
-/* Mobile Split Layout (Perfect Snap, No Overflow) */
+/* Mobile Layout Adaptation */
 @media (max-width: 768px) {
     .screen {
-        height: auto;
-        min-height: 100vh;
-        overflow-y: auto;
+        overflow-y: auto; /* Re-enable scrolling for mobile within the flex boundary */
     }
-    .split-layout {
+    
+    .hero-layout {
         flex-direction: column;
+        padding: 0 16px 40px 16px;
         height: auto;
     }
-    .split-pane {
+
+    .hero-left {
+        text-align: center;
+        padding-right: 0;
+        margin-bottom: 0;
+        align-items: center;
+        justify-content: center;
         width: 100%;
         min-height: calc(100vh - var(--nav-height));
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        justify-content: center;
     }
-    .split-pane:last-child {
-        border-bottom: none;
+
+    .hero-right {
+        width: 100%;
     }
-    .navbar {
-        padding: 0 16px;
+
+    .flip-container {
+        height: 460px;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .pane-content {
+        max-width: 100%;
+    }
+
+    .flip-front, .flip-back {
+        padding: 24px 20px; /* Reduced padding for mobile to fix squished look */
     }
 }
 
@@ -215,11 +341,15 @@ button {
 }
 
 .pane-title {
-    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-size: clamp(1.5rem, 4vw, 2.25rem);
     font-weight: 800;
     line-height: 1.1;
-    letter-spacing: -0.04em;
+    letter-spacing: -0.02em;
     margin-bottom: 16px;
+    text-align: center;
+    background: linear-gradient(135deg, #fff, #a1a1aa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .pane-desc {
@@ -435,12 +565,41 @@ input[type="text"]:focus {
     padding: 8px 16px;
 }
 
+/* --- Room Transfer Pane --- */
+.room-transfer-pane {
+    width: 100%;
+}
+
 /* --- File Selection --- */
 .file-selection {
-    text-align: center;
+    text-align: right;
     margin-bottom: 24px;
 }
 
+.transfers-container {
+    margin-top: 16px;
+}
+
+.transfer-controls {
+    display: flex;
+    gap: 12px;
+    margin-top: 32px;
+    justify-content: flex-end;
+}
+
+.transfer-controls .btn {
+    margin-top: 0;
+}
+
+/* Drag and Drop State */
+.drag-over {
+    border: 2px dashed var(--accent) !important;
+    background-color: rgba(37, 99, 235, 0.05) !important;
+    transform: scale(1.02);
+    transition: all 0.2s ease;
+}
+
+/* File List & Downloads */
 input[type="file"] {
     display: none;
 }
@@ -511,10 +670,6 @@ input[type="file"] {
     background-color: var(--bg-main);
     border-radius: 99px;
     overflow: hidden;
-}
-
-#cancel-transfer-btn {
-    margin-top: 16px;
 }
 
 .progress-fill {
@@ -828,4 +983,35 @@ input[type="file"] {
 
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+/* Limit Info Text */
+.limit-info-text {
+    margin-top: 32px;
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    padding: 16px;
+    border-radius: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    text-align: left;
+    max-width: 400px;
+}
+
+.limit-info-text span.material-symbols-rounded {
+    color: var(--accent);
+    font-size: 1.2rem;
+    margin-top: 2px;
+}
+
+.limit-info-text p {
+    margin: 0;
+}
+
+.limit-info-text b {
+    color: var(--text-primary);
 }

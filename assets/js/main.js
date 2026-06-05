@@ -1,3 +1,64 @@
+// SECURITY: Sanitize inputs to prevent XSS (Cross-Site Scripting)
+function sanitizeHTML(str) {
+    if (!str) return '';
+    const temp = document.createElement('div');
+    temp.textContent = str;
+    return temp.innerHTML;
+}
+
+// --- End-to-End Encryption (AES-GCM) ---
+let sharedCryptoKey = null;
+
+async function deriveKey(roomId) {
+    const enc = new TextEncoder();
+    const keyMaterial = await window.crypto.subtle.importKey(
+        "raw",
+        enc.encode(roomId),
+        { name: "PBKDF2" },
+        false,
+        ["deriveBits", "deriveKey"]
+    );
+    const salt = enc.encode("DroperX_Salt_v1"); 
+    sharedCryptoKey = await window.crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+    );
+}
+
+async function encryptChunk(chunkBuffer) {
+    if (!sharedCryptoKey) return chunkBuffer;
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        sharedCryptoKey,
+        chunkBuffer
+    );
+    const payload = new Uint8Array(iv.length + encrypted.byteLength);
+    payload.set(iv, 0);
+    payload.set(new Uint8Array(encrypted), iv.length);
+    return payload.buffer;
+}
+
+async function decryptChunk(encryptedPayload) {
+    if (!sharedCryptoKey) return encryptedPayload;
+    const payloadBytes = new Uint8Array(encryptedPayload);
+    const iv = payloadBytes.slice(0, 12);
+    const encryptedData = payloadBytes.slice(12);
+    try {
+        return await window.crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: iv },
+            sharedCryptoKey,
+            encryptedData
+        );
+    } catch (e) {
+        console.error("Decryption failed!", e);
+        return null;
+    }
+}
+
 // UI Elements
 const homeScreen = document.getElementById('home-screen');
 const roomScreen = document.getElementById('room-screen');
@@ -15,6 +76,7 @@ const sendProgressFill = document.getElementById('send-progress-fill');
 const sendProgressText = document.getElementById('send-progress-text');
 const sendStatus = document.getElementById('send-status');
 const cancelTransferBtn = document.getElementById('cancel-transfer-btn');
+const pauseTransferBtn = document.getElementById('pause-transfer-btn');
 
 const receiveProgressContainer = document.getElementById('receive-progress-container');
 const receiveProgressFill = document.getElementById('receive-progress-fill');
@@ -261,19 +323,29 @@ window.addEventListener('load', () => {
     }
 });
 
-createRoomBtn.addEventListener('click', () => {
+createRoomBtn.addEventListener('click', async () => {
     createRoomBtn.disabled = true;
     createRoomBtn.innerHTML = '<span class="spinner"></span> Creating...';
     const newRoomId = generateRoomId();
+    await deriveKey(newRoomId);
     initPeer(newRoomId);
 });
 
-joinRoomBtn.addEventListener('click', () => {
+joinRoomBtn.addEventListener('click', async () => {
     const idToJoin = roomIdInput.value.trim().toUpperCase();
+    const isValidRoomId = /^[A-Z0-9]{6}$/i.test(idToJoin);
+    
+    if (!isValidRoomId) {
+        showToast("Invalid Room ID. Please enter a valid 6-digit code.");
+        return;
+    }
+    
     if (idToJoin) {
         roomId = idToJoin;
         joinRoomBtn.disabled = true;
         joinRoomBtn.innerHTML = '<span class="spinner"></span> Joining...';
+        
+        await deriveKey(roomId);
         
         peer = new Peer();
         peer.on('open', () => {
@@ -329,10 +401,35 @@ function setupDataConnection() {
         }
     });
 
-    dataConnection.on('data', (data) => {
+    dataConnection.on('data', async (data) => {
+        let parsed = null;
+
         if (typeof data === 'string') {
-            const parsed = JSON.parse(data);
-            
+            try {
+                parsed = JSON.parse(data);
+            } catch (e) {
+                console.warn("Could not parse string data", e);
+            }
+        } else if (data && typeof data === 'object' && data.command) {
+            parsed = data; // Already an object (PeerJS json serialization quirk)
+        } else if (data instanceof ArrayBuffer || data instanceof Uint8Array || data instanceof Blob) {
+            try {
+                // In some browsers, strings might be wrapped in ArrayBuffer or Blob
+                let text = "";
+                if (data instanceof Blob) {
+                    text = await data.text();
+                } else {
+                    text = new TextDecoder().decode(data);
+                }
+                if (text.includes('"command"')) {
+                    parsed = JSON.parse(text);
+                }
+            } catch(e) {
+                // Not a JSON string, ignore error and treat as chunk
+            }
+        }
+
+        if (parsed && parsed.command) {
             if (parsed.command === 'CANCEL_TRANSFER') {
                 receiveStatus.innerText = "Transfer Cancelled by Sender!";
                 receiveProgressContainer.classList.add('state-error');
@@ -343,22 +440,78 @@ function setupDataConnection() {
                 }, 4000);
                 return;
             }
-            
-            fileMeta = parsed;
-            receiveBuffer = [];
-            receivedSize = 0;
-            
-            receiveProgressContainer.classList.remove('hidden');
-            receiveProgressContainer.classList.remove('state-error', 'state-success');
-            receiveStatus.innerText = `Receiving: ${fileMeta.name} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
+
+            if (parsed.command === 'PAUSE_TRANSFER') {
+                receiveStatus.innerText = "Transfer Paused by Sender";
+                receiveProgressContainer.classList.add('state-error');
+                return;
+            }
+
+            if (parsed.command === 'RESUME_TRANSFER') {
+                receiveStatus.innerText = `Receiving: ${sanitizeHTML(fileMeta.name)} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
+                receiveProgressContainer.classList.remove('state-error');
+                return;
+            }
+
+            if (parsed.command === 'ACCEPT_FILE') {
+                isWaitingForAccept = false;
+                if (selectedFiles && selectedFiles.length > 0) {
+                    const currentFile = selectedFiles[currentFileIndex];
+                    if (currentFile) {
+                        sendStatus.innerText = `Sending: ${sanitizeHTML(currentFile.name)} (${currentFileIndex + 1}/${selectedFiles.length})`;
+                    }
+                }
+                return;
+            }
+
+            if (parsed.command === 'FILE_METADATA') {
+                fileMeta = parsed;
+                receiveBuffer = [];
+                receivedSize = 0;
+                
+                receiveProgressContainer.classList.remove('hidden');
+                receiveProgressContainer.classList.remove('state-error', 'state-success');
+                receiveStatus.innerText = `Receiving: ${sanitizeHTML(fileMeta.name)} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
+                receiveProgressFill.style.width = '0%';
+                receiveProgressText.innerText = '0%';
+                fileStream = null;
+                
+                // Automatically accept the file
+                if (dataConnection && dataConnection.open) {
+                    dataConnection.send({ command: 'ACCEPT_FILE' });
+                }
+                return;
+            }
         } else {
-            receiveBuffer.push(data);
-            receivedSize += data.byteLength;
+            // Must be a file chunk
+            let bufferToDecrypt = data;
+            if (data instanceof Blob) {
+                bufferToDecrypt = await data.arrayBuffer();
+            }
+            const decryptedBuffer = await decryptChunk(bufferToDecrypt);
+            if (!decryptedBuffer) {
+                showToast("Decryption error. File corrupted.", "error");
+                return;
+            }
+            
+            if (fileStream) {
+                await fileStream.write(decryptedBuffer);
+            } else {
+                receiveBuffer.push(decryptedBuffer);
+            }
+            
+            receivedSize += decryptedBuffer.byteLength;
             
             updateReceiveProgress(receivedSize, fileMeta.size);
 
             if (receivedSize >= fileMeta.size) {
-                showDownloadButton(receiveBuffer, fileMeta.name, fileMeta.type);
+                if (fileStream) {
+                    await fileStream.close();
+                    fileStream = null;
+                    showToast(`File saved: ${sanitizeHTML(fileMeta.name)}`, "success");
+                } else {
+                    showDownloadButton(receiveBuffer, fileMeta.name, fileMeta.type);
+                }
                 
                 if (fileMeta.fileIndex + 1 === fileMeta.totalFiles) {
                     receiveStatus.innerText = "All Files Received!";
@@ -403,6 +556,28 @@ function clearAllFiles() {
 // === FILE TRANSFER LOGIC ===
 let isTransferring = false;
 let isTransferCancelled = false;
+let isPaused = false;
+let isWaitingForAccept = false;
+let fileStream = null;
+
+pauseTransferBtn.addEventListener('click', () => {
+    isPaused = !isPaused;
+    if (isPaused) {
+        pauseTransferBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span> Resume';
+        sendStatus.innerText = "Transfer Paused";
+        sendProgressContainer.classList.add('state-error'); // Yellow-ish or red-ish
+        if (dataConnection && dataConnection.open) {
+            dataConnection.send(JSON.stringify({ command: 'PAUSE_TRANSFER' }));
+        }
+    } else {
+        pauseTransferBtn.innerHTML = '<span class="material-symbols-rounded">pause</span> Pause';
+        sendStatus.innerText = "Transfer Resumed...";
+        sendProgressContainer.classList.remove('state-error');
+        if (dataConnection && dataConnection.open) {
+            dataConnection.send(JSON.stringify({ command: 'RESUME_TRANSFER' }));
+        }
+    }
+});
 
 cancelTransferBtn.addEventListener('click', () => {
     isTransferCancelled = true;
@@ -427,19 +602,58 @@ cancelTransferBtn.addEventListener('click', () => {
     }, 3000);
 });
 
-fileInput.addEventListener('change', (e) => {
+function handleFileSelection(filesArray) {
     if (isTransferring) {
-        e.preventDefault();
         showToast("Cannot select new files while a transfer is in progress.", "error");
         return;
     }
-    if (e.target.files.length > 0) {
-        selectedFiles = Array.from(e.target.files);
+    if (filesArray.length > 0) {
+        selectedFiles = Array.from(filesArray);
         const totalSize = selectedFiles.reduce((acc, file) => acc + file.size, 0);
         fileDetails.innerText = `Selected: ${selectedFiles.length} file(s) (${(totalSize / 1024 / 1024).toFixed(2)} MB)`;
         sendFileBtn.disabled = false;
+    } else {
+        selectedFiles = [];
+        fileDetails.innerText = "No files selected";
+        sendFileBtn.disabled = true;
     }
+}
+
+fileInput.addEventListener('change', (e) => {
+    handleFileSelection(e.target.files);
 });
+
+// --- Drag and Drop Feature ---
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    roomScreen.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+    roomScreen.addEventListener(eventName, () => {
+        if (!roomScreen.classList.contains('hidden') && !isTransferring) {
+            roomScreen.classList.add('drag-over');
+        }
+    }, false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    roomScreen.addEventListener(eventName, () => {
+        roomScreen.classList.remove('drag-over');
+    }, false);
+});
+
+roomScreen.addEventListener('drop', (e) => {
+    if (!roomScreen.classList.contains('hidden') && !isTransferring) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFileSelection(files);
+    }
+}, false);
 
 sendFileBtn.addEventListener('click', () => {
     if (isTransferring) {
@@ -453,10 +667,13 @@ sendFileBtn.addEventListener('click', () => {
 
     isTransferring = true;
     isTransferCancelled = false;
+    isPaused = false;
+    pauseTransferBtn.innerHTML = '<span class="material-symbols-rounded">pause</span> Pause';
     fileInput.disabled = true;
     sendFileBtn.disabled = true;
     sendProgressContainer.classList.remove('hidden');
     cancelTransferBtn.classList.remove('hidden');
+    pauseTransferBtn.classList.remove('hidden');
     currentFileIndex = 0;
     
     sendNextFile();
@@ -465,6 +682,7 @@ sendFileBtn.addEventListener('click', () => {
 function sendNextFile() {
     if (currentFileIndex >= selectedFiles.length) {
         cancelTransferBtn.classList.add('hidden');
+        pauseTransferBtn.classList.add('hidden');
         sendStatus.innerText = "All Files Sent Successfully!";
         sendProgressContainer.classList.add('state-success');
         sendProgressFill.style.width = '100%';
@@ -485,30 +703,78 @@ function sendNextFile() {
 
     const currentFile = selectedFiles[currentFileIndex];
     sendProgressContainer.classList.remove('state-error', 'state-success');
-    sendStatus.innerText = `Sending: ${currentFile.name} (${currentFileIndex + 1}/${selectedFiles.length})`;
+    sendStatus.innerText = `Sending: ${sanitizeHTML(currentFile.name)} (${currentFileIndex + 1}/${selectedFiles.length})`;
     
     // Send metadata first
     const metadata = {
+        command: 'FILE_METADATA',
         name: currentFile.name,
         size: currentFile.size,
         type: currentFile.type,
         fileIndex: currentFileIndex,
         totalFiles: selectedFiles.length
     };
-    dataConnection.send(JSON.stringify(metadata));
+
+    dataConnection.send(metadata); // Use native object serialization
+
+    isWaitingForAccept = true;
+    sendStatus.innerText = `Waiting for receiver to accept: ${sanitizeHTML(currentFile.name)}...`;
 
     // Send chunks
     let offset = 0;
     const fileReader = new FileReader();
     
-    fileReader.onload = (e) => {
+    fileReader.onload = async (e) => {
         if (!dataConnection || !dataConnection.open) return;
         if (isTransferCancelled) return; // Halt sending
         
-        dataConnection.send(e.target.result);
-        offset += e.target.result.byteLength;
+        try {
+            const rawBuffer = e.target.result;
+            
+            if (!rawBuffer || rawBuffer.byteLength === 0) {
+                console.warn("Read 0 bytes. Ending chunk loop for this file.");
+                offset = currentFile.size; // Force finish this file
+                checkPauseAndRead();
+                return;
+            }
+            
+            const encryptedBuffer = await encryptChunk(rawBuffer);
+            
+            dataConnection.send(encryptedBuffer);
+            offset += rawBuffer.byteLength;
+            
+            updateSendProgress(offset, currentFile.size);
+            
+            // Proceed to next chunk
+            checkPauseAndRead();
+        } catch (err) {
+            console.error("Chunk processing error:", err);
+            showToast("Error processing file chunk", "error");
+        }
+    };
+
+    fileReader.onerror = () => {
+        console.error("FileReader error:", fileReader.error);
+        showToast("Error reading file", "error");
+    };
+
+    const readSlice = (o) => {
+        const slice = currentFile.slice(offset, o + CHUNK_SIZE);
+        fileReader.readAsArrayBuffer(slice);
+    };
+
+    const checkPauseAndRead = () => {
+        if (isTransferCancelled) return;
+        if (isPaused || isWaitingForAccept) {
+            setTimeout(checkPauseAndRead, 100);
+            return;
+        }
         
-        updateSendProgress(offset, currentFile.size);
+        // Prevent WebRTC silent buffer overflow (keeps buffer under 1MB)
+        if (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
+            setTimeout(checkPauseAndRead, 50);
+            return;
+        }
 
         if (offset < currentFile.size) {
             readSlice(offset);
@@ -519,12 +785,7 @@ function sendNextFile() {
         }
     };
 
-    const readSlice = (o) => {
-        const slice = currentFile.slice(offset, o + CHUNK_SIZE);
-        fileReader.readAsArrayBuffer(slice);
-    };
-
-    readSlice(0);
+    checkPauseAndRead();
 }
 
 function updateSendProgress(current, total) {
@@ -548,7 +809,7 @@ function showDownloadButton(buffer, name, type) {
     
     const fileNameDisplay = document.createElement('span');
     fileNameDisplay.className = 'file-name';
-    fileNameDisplay.innerText = name;
+    fileNameDisplay.innerText = sanitizeHTML(name);
     fileNameDisplay.title = name;
     
     const btn = document.createElement('button');
@@ -571,13 +832,14 @@ function showDownloadButton(buffer, name, type) {
 }
 
 function addSentFileRow(name) {
+    const safeName = sanitizeHTML(name);
     const fileRow = document.createElement('div');
     fileRow.className = 'sent-file-chip';
     
     const fileNameDisplay = document.createElement('span');
     fileNameDisplay.className = 'file-name';
-    fileNameDisplay.innerText = name;
-    fileNameDisplay.title = name;
+    fileNameDisplay.innerText = safeName;
+    fileNameDisplay.title = safeName;
     
     const iconSpan = document.createElement('span');
     iconSpan.className = 'material-symbols-rounded';
@@ -590,7 +852,7 @@ function addSentFileRow(name) {
     sentFilesDropdown.classList.remove('hidden');
     
     fileRow.addEventListener('mouseenter', () => {
-        customTooltip.innerText = name;
+        customTooltip.innerText = safeName;
         customTooltip.classList.remove('hidden');
         
         const rect = fileRow.getBoundingClientRect();
@@ -606,6 +868,8 @@ function addSentFileRow(name) {
 clearDownloadsBtn.addEventListener('click', () => {
     downloadLinksContainer.innerHTML = '';
     downloadListHeader.classList.add('hidden');
+    receiveProgressContainer.classList.add('hidden');
+    receiveProgressContainer.classList.remove('state-success', 'state-error');
     showToast('Received files cleared', 'info');
 });
 
