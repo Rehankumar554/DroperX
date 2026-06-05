@@ -152,8 +152,20 @@ displayRoomId.addEventListener('click', () => {
 });
 
 // PeerJS Variables
-let peer;
-let dataConnection;
+let peer = null;
+let dataConnection = null;
+
+// PWA Service Worker Registration
+let serviceWorkerRegistration = null;
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+        serviceWorkerRegistration = reg;
+        console.log('Service Worker Registered');
+    }).catch(err => {
+        console.warn('Service Worker Registration Failed:', err);
+    });
+}
+
 let roomId;
 let selectedFiles = [];
 let currentFileIndex = 0;
@@ -475,8 +487,48 @@ function setupDataConnection() {
                 receiveProgressFill.style.width = '0%';
                 receiveProgressText.innerText = '0%';
                 fileStream = null;
+
+                // --- STREAM SAVER LOGIC ---
+                // If SW is active and TransformStream is supported, use limitless streaming
+                if (navigator.serviceWorker && navigator.serviceWorker.controller && window.TransformStream) {
+                    try {
+                        const ts = new TransformStream();
+                        fileStream = ts.writable.getWriter();
+                        const uniqueId = Math.random().toString(36).substring(2);
+                        const downloadUrl = `./stream-download/${uniqueId}/${encodeURIComponent(fileMeta.name)}`;
+                        
+                        const channel = new MessageChannel();
+                        channel.port1.onmessage = (e) => {
+                            if (e.data.status === 'READY') {
+                                // Create invisible iframe to trigger the download prompt
+                                const iframe = document.createElement('iframe');
+                                iframe.hidden = true;
+                                iframe.src = downloadUrl;
+                                document.body.appendChild(iframe);
+                                
+                                // Tell sender we are ready
+                                if (dataConnection && dataConnection.open) {
+                                    dataConnection.send({ command: 'ACCEPT_FILE' });
+                                }
+                            }
+                        };
+                        
+                        navigator.serviceWorker.controller.postMessage({
+                            type: 'STREAM_DOWNLOAD',
+                            id: uniqueId,
+                            stream: ts.readable
+                        }, [ts.readable, channel.port2]);
+                        
+                        return; // Exit early, wait for SW to reply READY
+                    } catch (e) {
+                        console.warn("StreamSaver setup failed, falling back to RAM", e);
+                        fileStream = null;
+                    }
+                } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                    showToast("No HTTPS detected. Falling back to RAM limit.", "warning");
+                }
                 
-                // Automatically accept the file
+                // Automatically accept the file (RAM Fallback)
                 if (dataConnection && dataConnection.open) {
                     dataConnection.send({ command: 'ACCEPT_FILE' });
                 }
@@ -495,27 +547,31 @@ function setupDataConnection() {
             }
             
             if (fileStream) {
-                await fileStream.write(decryptedBuffer);
+                try {
+                    await fileStream.write(new Uint8Array(decryptedBuffer));
+                    receivedSize += decryptedBuffer.byteLength;
+                    updateReceiveProgress(receivedSize, fileMeta.size);
+                    
+                    if (receivedSize >= fileMeta.size) {
+                        await fileStream.close();
+                        fileStream = null;
+                        
+                        receiveProgressContainer.classList.add('state-success');
+                        receiveStatus.innerText = `Saved: ${sanitizeHTML(fileMeta.name)}`;
+                        addReceivedFileRow(fileMeta.name, null, true); // True flag = streaming done
+                    }
+                } catch(e) {
+                    console.error("Stream write error:", e);
+                    showToast("Streaming failed. Connection lost?", "error");
+                }
             } else {
                 receiveBuffer.push(decryptedBuffer);
-            }
-            
-            receivedSize += decryptedBuffer.byteLength;
-            
-            updateReceiveProgress(receivedSize, fileMeta.size);
-
-            if (receivedSize >= fileMeta.size) {
-                if (fileStream) {
-                    await fileStream.close();
-                    fileStream = null;
-                    showToast(`File saved: ${sanitizeHTML(fileMeta.name)}`, "success");
-                } else {
-                    showDownloadButton(receiveBuffer, fileMeta.name, fileMeta.type);
-                }
+                receivedSize += decryptedBuffer.byteLength;
                 
-                if (fileMeta.fileIndex + 1 === fileMeta.totalFiles) {
-                    receiveStatus.innerText = "All Files Received!";
-                    receiveProgressContainer.classList.add('state-success');
+                updateReceiveProgress(receivedSize, fileMeta.size);
+
+                if (receivedSize >= fileMeta.size) {
+                    finalizeReceive();
                 }
             }
         }
@@ -538,6 +594,26 @@ function setupDataConnection() {
             window.location.href = window.location.href.split('?')[0];
         });
     });
+}
+
+function finalizeReceive() {
+    const blob = new Blob(receiveBuffer, { type: fileMeta.type });
+    const blobUrl = URL.createObjectURL(blob);
+    
+    // Automatically trigger RAM download for non-streamed chunks
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileMeta.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    addReceivedFileRow(fileMeta.name, blobUrl, false);
+
+    if (fileMeta.fileIndex + 1 === fileMeta.totalFiles) {
+        receiveStatus.innerText = "All Files Received!";
+        receiveProgressContainer.classList.add('state-success');
+    }
 }
 
 function clearAllFiles() {
@@ -718,7 +794,7 @@ function sendNextFile() {
     dataConnection.send(metadata); // Use native object serialization
 
     isWaitingForAccept = true;
-    sendStatus.innerText = `Waiting for receiver to accept: ${sanitizeHTML(currentFile.name)}...`;
+    sendStatus.innerText = `Initializing transfer: ${sanitizeHTML(currentFile.name)}...`;
 
     // Send chunks
     let offset = 0;
@@ -800,36 +876,43 @@ function updateReceiveProgress(current, total) {
     receiveProgressText.innerText = percent + '%';
 }
 
-function showDownloadButton(buffer, name, type) {
-    const blob = new Blob(buffer, { type: type });
-    const blobUrl = URL.createObjectURL(blob);
-    
-    const fileRow = document.createElement('div');
-    fileRow.className = 'download-file-row';
-    
-    const fileNameDisplay = document.createElement('span');
-    fileNameDisplay.className = 'file-name';
-    fileNameDisplay.innerText = sanitizeHTML(name);
-    fileNameDisplay.title = name;
-    
-    const btn = document.createElement('button');
-    btn.className = 'btn primary icon-btn';
-    btn.title = 'Download';
-    btn.innerHTML = '<span class="material-symbols-rounded">download</span>';
-    btn.onclick = () => {
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-    };
-    
-    fileRow.appendChild(fileNameDisplay);
-    fileRow.appendChild(btn);
-    downloadLinksContainer.appendChild(fileRow);
+function addReceivedFileRow(fileName, fileUrl, isStreamed = false) {
     downloadListHeader.classList.remove('hidden');
+    
+    const row = document.createElement('div');
+    row.className = 'download-file-row';
+    
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'file-name';
+    nameSpan.innerText = fileName;
+    
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.gap = '8px';
+    
+    if (isStreamed) {
+        const streamedBadge = document.createElement('span');
+        streamedBadge.className = 'sent-file-chip';
+        streamedBadge.innerHTML = '<span class="material-symbols-rounded">check_circle</span> Streamed';
+        streamedBadge.style.background = 'rgba(16, 185, 129, 0.1)';
+        streamedBadge.style.color = 'var(--success)';
+        streamedBadge.style.border = 'none';
+        actions.appendChild(streamedBadge);
+    } else {
+        const downloadBtn = document.createElement('a');
+        downloadBtn.className = 'btn primary icon-btn small';
+        downloadBtn.href = fileUrl;
+        downloadBtn.download = fileName;
+        downloadBtn.innerHTML = '<span class="material-symbols-rounded">download</span>';
+        actions.appendChild(downloadBtn);
+    }
+    
+    row.appendChild(nameSpan);
+    row.appendChild(actions);
+    downloadLinksContainer.appendChild(row);
 }
+
+// Empty to delete the function
 
 function addSentFileRow(name) {
     const safeName = sanitizeHTML(name);

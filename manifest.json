@@ -1,0 +1,16 @@
+{
+  "name": "DroperX - Secure File Transfer",
+  "short_name": "DroperX",
+  "description": "Fast, secure, and limitless peer-to-peer file transfer directly in your browser.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "icons": [
+    {
+      "src": "assets/images/icon.png",
+      "sizes": "any",
+      "type": "image/png"
+    }
+  ]
+}

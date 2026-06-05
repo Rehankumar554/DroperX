@@ -10,6 +10,11 @@
     
     <!-- Primary Meta Tags -->
     <meta name="description" content="DroperX is a fast, secure, and purely peer-to-peer file transfer protocol. Share files instantly across devices without server storage limitations.">
+    
+    <!-- PWA Setup -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#050505">
+    <link rel="apple-touch-icon" href="assets/images/icon.png">
     <meta name="keywords" content="file transfer, WebRTC, P2P file sharing, secure file drop, DroperX, peer-to-peer transfer, share files online, send large files">
     <meta name="author" content="DroperX">
     <meta name="robots" content="index, follow">
@@ -21,7 +26,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <!-- Strict Security: Content Security Policy -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' wss://0.peerjs.com https://0.peerjs.com turn:* https://unpkg.com; frame-src 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.vercel-insights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' wss://0.peerjs.com https://0.peerjs.com turn:* https://unpkg.com https://*.vercel-insights.com; frame-src 'self';">
 
     <!-- Performance Optimizations (Core Web Vitals) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -46,10 +51,10 @@
     <meta property="twitter:image" content="https://droperx.vercel.app/assets/images/logo.png">
 
 
-    <link rel="icon" type="image/png" href="assets/images/favicon/favicon-96x96.png" sizes="96x96" />
-    <link rel="icon" type="image/svg+xml" href="assets/images/favicon/favicon.svg" />
-    <link rel="shortcut icon" href="assets/images/favicon/favicon.ico" />
-    <link rel="apple-touch-icon" sizes="180x180" href="assets/images/favicon/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="https://droperx.vercel.app/assets/images/favicon/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="https://droperx.vercel.app/assets/images/favicon/favicon.svg" />
+    <link rel="shortcut icon" href="https://droperx.vercel.app/assets/images/favicon/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="https://droperx.vercel.app/assets/images/favicon/apple-touch-icon.png" />
     <link rel="manifest" href="site.webmanifest" />
 
     <link rel="stylesheet" href="assets/css/style.css">
@@ -76,14 +81,7 @@
     }
     </script>
 
-    <!-- Vercel Web Analytics -->
-    <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
-    
-    <!-- Vercel Speed Insights -->
-    <script>
-        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
+    <!-- Analytics (Removed for local development) -->
 </head>
 
 <body>
