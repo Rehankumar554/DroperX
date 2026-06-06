@@ -246,6 +246,7 @@ if (shareLinkBtn) {
 // PeerJS Variables
 let peer = null;
 let dataConnection = null;
+let isExiting = false;
 
 // PWA Service Worker Registration
 let serviceWorkerRegistration = null;
@@ -393,6 +394,8 @@ function initPeer(id) {
     });
 
     peer.on('disconnected', () => {
+        if (isExiting) return;
+        isExiting = true;
         showAlert("Disconnected", "Connection lost. Exiting room...", () => {
             if (peer) peer.destroy();
             window.location.href = window.location.href.split('?')[0];
@@ -404,6 +407,8 @@ function initPeer(id) {
 window.addEventListener('load', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
+    const actionParam = urlParams.get('action');
+    
     if (roomParam) {
         roomId = roomParam.toUpperCase();
         // Generate a random ID for ourselves, then connect to the room ID
@@ -431,6 +436,19 @@ window.addEventListener('load', () => {
             joinRoomBtn.disabled = false;
             joinRoomBtn.innerHTML = 'Join Room';
             showToast('Error connecting: ' + err.message, 'error');
+        });
+    } else if (actionParam === 'create') {
+        // Clear the URL param without reloading
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setTimeout(() => {
+            if(createRoomBtn) createRoomBtn.click();
+        }, 100);
+    }
+    
+    const navCreateBtn = document.getElementById('nav-create-room-btn');
+    if (navCreateBtn) {
+        navCreateBtn.addEventListener('click', () => {
+            if(createRoomBtn) createRoomBtn.click();
         });
     }
 });
@@ -473,6 +491,8 @@ joinRoomBtn.addEventListener('click', async () => {
             setupDataConnection();
         });
         peer.on('disconnected', () => {
+            if (isExiting) return;
+            isExiting = true;
             showAlert("Disconnected", "Connection lost. Exiting room...", () => {
                 if (peer) peer.destroy();
                 window.location.href = window.location.href.split('?')[0];
@@ -726,6 +746,8 @@ function setupDataConnection() {
     });
 
     dataConnection.on('close', () => {
+        if (isExiting) return;
+        isExiting = true;
         clearAllFiles();
         showAlert("Peer Left", "The other peer has left the room. Exiting...", () => {
             if (dataConnection) dataConnection.close();
@@ -1257,6 +1279,7 @@ clearDownloadsBtn.addEventListener('click', () => {
 });
 
 leaveRoomBtn.addEventListener('click', () => {
+    isExiting = true;
     clearAllFiles();
     if (dataConnection) dataConnection.close();
     if (peer) peer.destroy();
