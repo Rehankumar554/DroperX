@@ -826,7 +826,8 @@ input[type="file"] {
 
 /* --- Content Pages (About, Legal) --- */
 .content-page {
-    padding-top: var(--nav-height);
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .page-title {
