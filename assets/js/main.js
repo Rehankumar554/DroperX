@@ -279,14 +279,14 @@ function showScreen(screen) {
     
     // Toggle "Get Started" nav link visibility
     const navGetStartedBtn = document.getElementById('nav-get-started-btn');
-    const bottomAppBar = document.querySelector('.bottom-app-bar');
+    const mobileGetStartedBtn = document.getElementById('mobile-get-started-btn');
     
     if (screen.id === 'room-screen') {
         if (navGetStartedBtn) navGetStartedBtn.style.display = 'none';
-        if (bottomAppBar) bottomAppBar.style.display = 'none';
+        if (mobileGetStartedBtn) mobileGetStartedBtn.style.display = 'none';
     } else {
         if (navGetStartedBtn) navGetStartedBtn.style.display = 'inline-block';
-        if (bottomAppBar) bottomAppBar.style.display = ''; // Fallback to CSS
+        if (mobileGetStartedBtn) mobileGetStartedBtn.style.display = 'flex';
     }
 }
 
