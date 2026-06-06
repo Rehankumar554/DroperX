@@ -63,8 +63,8 @@ async function decryptChunk(encryptedPayload) {
 const homeScreen = document.getElementById('home-screen');
 const roomScreen = document.getElementById('room-screen');
 const createRoomBtn = document.getElementById('create-room-btn');
-const joinRoomBtn = document.getElementById('join-room-btn');
-const roomIdInput = document.getElementById('room-id-input');
+const joinRoomBtn = document.getElementById('modal-join-room-btn');
+const roomIdInput = document.getElementById('modal-room-id-input');
 const displayRoomId = document.getElementById('display-room-id');
 const connectionStatus = document.getElementById('connection-status');
 const fileInput = document.getElementById('file-input');
@@ -117,7 +117,7 @@ const receiveStatus = document.getElementById('receive-status');
 
 const fileSelectionContainer = document.getElementById('file-selection-container');
 const qrCodeContainer = document.getElementById('qrcode-container');
-const scanQrBtn = document.getElementById('scan-qr-btn');
+const scanQrBtn = document.getElementById('modal-scan-qr-btn');
 const cancelScanBtn = document.getElementById('cancel-scan-btn');
 const readerElement = document.getElementById('reader');
 const qrWrapper = document.getElementById('qr-wrapper');
@@ -208,6 +208,7 @@ if (copyHomeIdBtn) {
 const deleteRoomBtn = document.getElementById('delete-room-btn');
 if (deleteRoomBtn) {
     deleteRoomBtn.addEventListener('click', () => {
+        isExiting = true;
         if (peer) {
             peer.destroy();
             peer = null;
@@ -216,9 +217,8 @@ if (deleteRoomBtn) {
         createRoomBtn.disabled = false;
         createRoomBtn.innerHTML = 'Create Room';
         
-        document.getElementById('sender-toggle').style.display = 'flex';
-        document.getElementById('create-room-initial').classList.remove('hidden');
-        document.getElementById('create-room-waiting').classList.add('hidden');
+                document.getElementById('create-room-initial').classList.remove('hidden');
+        document.getElementById('create-room-waiting').classList.remove('show'); setTimeout(() => document.getElementById('create-room-waiting').classList.add('hidden'), 300);
         showToast('Room deleted successfully.', 'info');
     });
 }
@@ -276,66 +276,82 @@ function generateRoomId() {
 function showScreen(screen) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
+    
+    // Toggle "Get Started" nav link visibility
+    const navGetStartedBtn = document.getElementById('nav-get-started-btn');
+    const bottomAppBar = document.querySelector('.bottom-app-bar');
+    
+    if (screen.id === 'room-screen') {
+        if (navGetStartedBtn) navGetStartedBtn.style.display = 'none';
+        if (bottomAppBar) bottomAppBar.style.display = 'none';
+    } else {
+        if (navGetStartedBtn) navGetStartedBtn.style.display = 'inline-block';
+        if (bottomAppBar) bottomAppBar.style.display = ''; // Fallback to CSS
+    }
 }
 
 let html5QrCode = null;
 
 // === SCAN QR CODE ===
-scanQrBtn.addEventListener('click', () => {
-    qrModal.classList.remove('hidden');
-    setTimeout(() => qrModal.classList.add('show'), 10);
-    
-    if (!html5QrCode) {
-        html5QrCode = new Html5Qrcode("reader");
-    }
-    
-    html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10 },
-        (decodedText) => {
-            try {
-                let roomParam = null;
-                if (decodedText.includes('room=')) {
-                    roomParam = decodedText.split('room=')[1].split('&')[0];
-                } else if (decodedText.length === 6) {
-                    roomParam = decodedText;
-                }
-                
-                if (roomParam) {
-                    html5QrCode.stop().then(() => {
-                        qrModal.classList.remove('show');
-                        setTimeout(() => qrModal.classList.add('hidden'), 300);
-                        roomIdInput.value = roomParam;
-                        joinRoomBtn.click();
-                    }).catch(err => {
-                        console.error("Stop error", err);
-                    });
-                }
-            } catch (e) {
-                console.error("Invalid QR Code content:", decodedText);
-            }
-        },
-        (errorMessage) => {
-            // parse error, ignore
+if (scanQrBtn) {
+    scanQrBtn.addEventListener('click', () => {
+        qrModal.classList.remove('hidden');
+        setTimeout(() => qrModal.classList.add('show'), 10);
+        
+        if (!html5QrCode) {
+            html5QrCode = new Html5Qrcode("reader");
         }
-    ).catch((err) => {
-        showToast("Camera access error: " + err, "error");
-        qrModal.classList.remove('show');
-        setTimeout(() => qrModal.classList.add('hidden'), 300);
-    });
-});
-
-cancelScanBtn.addEventListener('click', () => {
-    if (html5QrCode) {
-        html5QrCode.stop().then(() => {
+        
+        html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10 },
+            (decodedText) => {
+                try {
+                    let roomParam = null;
+                    if (decodedText.includes('room=')) {
+                        roomParam = decodedText.split('room=')[1].split('&')[0];
+                    } else if (decodedText.length === 6) {
+                        roomParam = decodedText;
+                    }
+                    
+                    if (roomParam) {
+                        html5QrCode.stop().then(() => {
+                            qrModal.classList.remove('show');
+                            setTimeout(() => qrModal.classList.add('hidden'), 300);
+                            roomIdInput.value = roomParam;
+                            joinRoomBtn.click();
+                        }).catch(err => {
+                            console.error("Stop error", err);
+                        });
+                    }
+                } catch (e) {
+                    console.error("Invalid QR Code content:", decodedText);
+                }
+            },
+            (errorMessage) => {
+                // parse error, ignore
+            }
+        ).catch((err) => {
+            showToast("Camera access error: " + err, "error");
             qrModal.classList.remove('show');
             setTimeout(() => qrModal.classList.add('hidden'), 300);
-        }).catch(err => console.error(err));
-    } else {
-        qrModal.classList.remove('show');
-        setTimeout(() => qrModal.classList.add('hidden'), 300);
-    }
-});
+        });
+    });
+}
+
+if (cancelScanBtn) {
+    cancelScanBtn.addEventListener('click', () => {
+        if (html5QrCode) {
+            html5QrCode.stop().then(() => {
+                qrModal.classList.remove('show');
+                setTimeout(() => qrModal.classList.add('hidden'), 300);
+            }).catch(err => console.error(err));
+        } else {
+            qrModal.classList.remove('show');
+            setTimeout(() => qrModal.classList.add('hidden'), 300);
+        }
+    });
+}
 
 // === INIT PEER ===
 function initPeer(id) {
@@ -350,9 +366,13 @@ function initPeer(id) {
         
         // If we created a new room (no existing connection yet)
         if (!dataConnection) {
-            document.getElementById('sender-toggle').style.display = 'none';
             document.getElementById('create-room-initial').classList.add('hidden');
-            document.getElementById('create-room-waiting').classList.remove('hidden');
+            const sendIcon = document.querySelector('#create-room-initial .material-symbols-rounded');
+            if (sendIcon) {
+                sendIcon.innerText = 'call_made';
+                sendIcon.style.animation = 'none';
+            }
+            document.getElementById('create-room-waiting').classList.remove('hidden'); setTimeout(() => document.getElementById('create-room-waiting').classList.add('show'), 10);
             document.getElementById('home-display-room-id').innerText = id;
             
             const qrContainer = document.getElementById('qrcode-container');
@@ -360,8 +380,8 @@ function initPeer(id) {
             const joinUrl = window.location.href.split('?')[0] + "?room=" + id;
             new QRCode(qrContainer, {
                 text: joinUrl,
-                width: 220,
-                height: 220,
+                width: 150,
+                height: 150,
                 colorDark : "#000000",
                 colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.L
@@ -381,10 +401,14 @@ function initPeer(id) {
     });
     
     peer.on('error', (err) => {
-        createRoomBtn.disabled = false;
-        createRoomBtn.innerHTML = 'Create Room';
-        joinRoomBtn.disabled = false;
-        joinRoomBtn.innerHTML = 'Join Room';
+        if (createRoomBtn) {
+            createRoomBtn.disabled = false;
+            createRoomBtn.innerHTML = 'Create Room';
+        }
+        if (joinRoomBtn) {
+            joinRoomBtn.disabled = false;
+            joinRoomBtn.innerHTML = 'Join Room';
+        }
         console.error(err);
         if (err.type === 'unavailable-id') {
             showAlert('Error', 'Room ID is already taken. Try joining it.');
@@ -404,38 +428,57 @@ function initPeer(id) {
 }
 
 // === JOIN OR CREATE ===
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
     const actionParam = urlParams.get('action');
     
     if (roomParam) {
         roomId = roomParam.toUpperCase();
-        // Generate a random ID for ourselves, then connect to the room ID
-        joinRoomBtn.disabled = true;
-        joinRoomBtn.innerHTML = '<span class="spinner"></span> Joining...';
+        
+        if (joinRoomBtn) {
+            joinRoomBtn.disabled = true;
+            joinRoomBtn.innerHTML = '<span class="spinner"></span> Joining...';
+        }
+        
+        // CRITICAL BUG FIX: Derive key before connecting so encryption works!
+        await deriveKey(roomId);
         
         peer = new Peer();
         peer.on('open', () => {
-            joinRoomBtn.disabled = false;
-            joinRoomBtn.innerHTML = 'Join Room';
-            displayRoomId.innerText = roomId;
-            qrCodeContainer.innerHTML = "";
-            showScreen(roomScreen);
-            connectionStatus.innerText = "Connecting to peer...";
+            if (joinRoomBtn) {
+                joinRoomBtn.disabled = false;
+                joinRoomBtn.innerHTML = 'Join Room';
+            }
+            if (displayRoomId) displayRoomId.innerText = roomId;
+            if (qrCodeContainer) qrCodeContainer.innerHTML = "";
+            
+            if (connectionStatus) connectionStatus.innerText = "Connecting to peer...";
+            const statusDot = document.getElementById('header-status-dot');
+            if (statusDot) statusDot.style.backgroundColor = "var(--info)";
             
             dataConnection = peer.connect(roomId);
             setupDataConnection();
         });
         peer.on('disconnected', () => {
-            alert("Connection lost. Exiting room...");
-            if (peer) peer.destroy();
-            window.location.href = window.location.href.split('?')[0];
+            if (isExiting) return;
+            isExiting = true;
+            showAlert("Disconnected", "Connection lost. Exiting room...", () => {
+                if (peer) peer.destroy();
+                window.location.href = window.location.href.split('?')[0];
+            });
         });
         peer.on('error', (err) => {
-            joinRoomBtn.disabled = false;
-            joinRoomBtn.innerHTML = 'Join Room';
-            showToast('Error connecting: ' + err.message, 'error');
+            if (joinRoomBtn) {
+                joinRoomBtn.disabled = false;
+                joinRoomBtn.innerHTML = 'Join Room';
+            }
+            if (err.type === 'peer-unavailable') {
+                showScreen(homeScreen);
+                showToast('Invalid Passcode or Room expired.', 'error');
+            } else {
+                showToast('Error connecting: ' + err.message, 'error');
+            }
         });
     } else if (actionParam === 'create') {
         // Clear the URL param without reloading
@@ -453,60 +496,87 @@ window.addEventListener('load', () => {
     }
 });
 
-createRoomBtn.addEventListener('click', async () => {
-    createRoomBtn.disabled = true;
-    createRoomBtn.innerHTML = '<span class="spinner"></span> Creating...';
-    const newRoomId = generateRoomId();
-    await deriveKey(newRoomId);
-    initPeer(newRoomId);
-});
+if (createRoomBtn) {
+    createRoomBtn.addEventListener('click', async () => {
+        const sendIcon = document.querySelector('#create-room-initial .material-symbols-rounded');
+        if (sendIcon) {
+            sendIcon.innerText = 'progress_activity';
+            sendIcon.style.animation = 'spin 1s linear infinite';
+        }
+        createRoomBtn.disabled = true;
+        createRoomBtn.innerHTML = '<span class="spinner"></span> Creating...';
+        const newRoomId = generateRoomId();
+        await deriveKey(newRoomId);
+        initPeer(newRoomId);
+    });
+}
 
-joinRoomBtn.addEventListener('click', async () => {
-    const idToJoin = roomIdInput.value.trim().toUpperCase();
-    const isValidRoomId = /^[A-Z0-9]{6}$/i.test(idToJoin);
-    
-    if (!isValidRoomId) {
-        showToast("Invalid Room ID. Please enter a valid 6-digit code.");
-        return;
-    }
-    
-    if (idToJoin) {
-        roomId = idToJoin;
-        joinRoomBtn.disabled = true;
-        joinRoomBtn.innerHTML = '<span class="spinner"></span> Joining...';
+if (joinRoomBtn) {
+    joinRoomBtn.addEventListener('click', async () => {
+        const idToJoin = roomIdInput.value.trim().toUpperCase();
+        const isValidRoomId = /^[A-Z0-9]{6}$/i.test(idToJoin);
         
-        await deriveKey(roomId);
+        if (!isValidRoomId) {
+            showToast("Invalid Room ID. Please enter a valid 6-digit code.");
+            return;
+        }
         
-        peer = new Peer();
-        peer.on('open', () => {
-            joinRoomBtn.disabled = false;
-            joinRoomBtn.innerHTML = 'Join Room';
-            displayRoomId.innerText = roomId;
-            qrCodeContainer.innerHTML = "";
-            showScreen(roomScreen);
-            connectionStatus.innerText = "Connecting to peer...";
-            document.getElementById('header-status-dot').style.backgroundColor = "var(--info)";
+        if (idToJoin) {
+            roomId = idToJoin;
+            joinRoomBtn.disabled = true;
+            joinRoomBtn.innerHTML = '<span class="spinner"></span> Joining...';
             
-            dataConnection = peer.connect(roomId);
-            setupDataConnection();
-        });
-        peer.on('disconnected', () => {
-            if (isExiting) return;
-            isExiting = true;
-            showAlert("Disconnected", "Connection lost. Exiting room...", () => {
-                if (peer) peer.destroy();
-                window.location.href = window.location.href.split('?')[0];
+            await deriveKey(roomId);
+            
+            peer = new Peer();
+            peer.on('open', () => {
+                joinRoomBtn.disabled = false;
+                joinRoomBtn.innerHTML = 'Join Room';
+                displayRoomId.innerText = roomId;
+                qrCodeContainer.innerHTML = "";
+                
+                const joinModal = document.getElementById('join-room-modal');
+                if (joinModal) {
+                    joinModal.classList.remove('show');
+                    setTimeout(() => joinModal.classList.add('hidden'), 300);
+                }
+                
+                connectionStatus.innerText = "Connecting to peer...";
+                document.getElementById('header-status-dot').style.backgroundColor = "var(--info)";
+                
+                dataConnection = peer.connect(roomId);
+                setupDataConnection();
             });
-        });
-        peer.on('error', (err) => {
-            joinRoomBtn.disabled = false;
-            joinRoomBtn.innerHTML = 'Join Room';
-            showToast('Error connecting: ' + err.message, 'error');
-        });
-    } else {
-        showToast("Please enter a Room ID", "error");
-    }
-});
+            peer.on('disconnected', () => {
+                if (isExiting) return;
+                isExiting = true;
+                showAlert("Disconnected", "Connection lost. Exiting room...", () => {
+                    if (peer) peer.destroy();
+                    window.location.href = window.location.href.split('?')[0];
+                });
+            });
+            peer.on('error', (err) => {
+                if (joinRoomBtn) {
+                    joinRoomBtn.disabled = false;
+                    joinRoomBtn.innerHTML = 'Join Room';
+                }
+                if (err.type === 'peer-unavailable') {
+                    showScreen(homeScreen);
+                    showToast('Invalid Passcode or Room expired.', 'error');
+                    const joinModal = document.getElementById('join-room-modal');
+                    if (joinModal) {
+                        joinModal.classList.remove('hidden');
+                        setTimeout(() => joinModal.classList.add('show'), 10);
+                    }
+                } else {
+                    showToast('Error connecting: ' + err.message, 'error');
+                }
+            });
+        } else {
+            showToast("Please enter a Room ID", "error");
+        }
+    });
+}
 
 // === DATA CONNECTION ===
 let receiveBuffer = [];
@@ -515,6 +585,7 @@ let fileMeta = null;
 
 function setupDataConnection() {
     dataConnection.on('open', () => {
+        showScreen(roomScreen);
         connectionStatus.innerText = "Connected! Ready to transfer.";
         document.getElementById('header-status-dot').classList.add('status-connected');
         const roomTransferPane = document.getElementById('room-transfer-pane');

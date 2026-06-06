@@ -126,6 +126,21 @@ button {
     color: var(--text-primary);
 }
 
+#nav-get-started-btn {
+    padding: 8px 24px; 
+    font-size: 0.95rem; 
+    border-radius: 40px; 
+    text-decoration: none; 
+    display: inline-block; 
+    width: max-content; 
+    white-space: nowrap;
+}
+
+/* --- Bottom App Bar (Mobile) --- */
+.bottom-app-bar {
+    display: none; /* Hidden on desktop */
+}
+
 /* --- Screens --- */
 .screen {
     display: none !important;
@@ -133,6 +148,7 @@ button {
     height: calc(100vh - var(--nav-height));
     overflow-y: auto;
     overflow-x: hidden; /* Prevent horizontal scrollbars during 3D flip animation */
+    box-sizing: border-box;
 }
 
 .screen.active {
@@ -148,20 +164,10 @@ button {
 }
 
 .hero-left {
-    flex: 1;
+    width: calc(50% - 20px);
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    padding-top: 20px;
-    padding-right: 20px;
-}
-
-.hero-right {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    width: 100%;
 }
 
 .hero-logo-text {
@@ -187,95 +193,29 @@ button {
 }
 
 .hero-right {
-    flex: 1;
+    width: calc(50% - 20px);
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    width: 100%;
     padding: 30px 0; /* Add padding to prevent vertical overflow during 3D flip */
 }
 
 /* Flip Card 3D Setup */
-.flip-container {
-    perspective: 1000px;
-    width: 100%;
-    max-width: 400px;
-    height: 480px;
-}
 
-.flip-card {
-    width: 100%;
-    height: 100%;
-    display: grid;
-    position: relative;
-    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-style: preserve-3d;
-}
 
-.flip-container.flipped .flip-card {
-    transform: rotateY(180deg);
-}
 
-.flip-front, .flip-back {
-    width: 100%;
-    height: 100%;
-    grid-area: 1 / 1;
-    backface-visibility: hidden;
-    background-color: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 24px;
-    padding: 24px 32px; /* Reduced padding to fit the smaller height */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-    overflow-y: auto;
-    overflow-x: hidden;
-}
 
 /* Hide scrollbar for flip faces */
 .flip-front::-webkit-scrollbar, .flip-back::-webkit-scrollbar {
     display: none;
 }
-.flip-front, .flip-back {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
-}
 
-.flip-back {
-    transform: rotateY(180deg);
-}
+
+
 
 /* Toggle Switch Styles */
-.toggle-switch {
-    display: flex;
-    background-color: var(--bg-main);
-    border-radius: 30px;
-    padding: 4px;
-    margin-bottom: 16px;
-    width: 100%;
-    max-width: 240px;
-}
 
-.toggle-btn {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    padding: 10px 0;
-    border-radius: 26px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.95rem;
-    transition: all 0.3s ease;
-}
-
-.toggle-btn.active {
-    color: var(--text-primary);
-    background-color: var(--surface);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-}
 
 .toggle-btn:not(.active):hover {
     color: var(--text-primary);
@@ -297,7 +237,7 @@ button {
 @media (max-width: 768px) {
     .hero-layout {
         flex-direction: column;
-        padding: 0 16px 40px 16px;
+        padding: 0 16px 40px 16px; 
         height: auto;
     }
 
@@ -325,8 +265,91 @@ button {
         max-width: 100%;
     }
 
-    .flip-front, .flip-back {
-        padding: 24px 20px; /* Reduced padding for mobile to fix squished look */
+    
+    .navbar {
+        padding: 0 16px;
+    }
+
+    .brand-logo {
+        font-size: 1.2rem;
+    }
+
+    .navbar {
+        padding: 0 16px;
+        justify-content: center;
+    }
+
+    .brand-logo {
+        font-size: 1.4rem;
+    }
+
+    .nav-links, .nav-actions {
+        display: none !important;
+    }
+
+    /* Bottom App Bar Styles */
+    .bottom-app-bar {
+        display: flex;
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: transparent;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 40px;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 16px;
+        gap: 20px;
+        z-index: 1000;
+        width: 85%;
+        max-width: 400px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    }
+    
+    .nav-2-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        color: #888;
+        text-decoration: none;
+        font-size: 0.7rem;
+        font-weight: 500;
+        gap: 4px;
+        transition: color 0.3s;
+    }
+    
+    .nav-2-item.active {
+        color: var(--accent);
+    }
+    
+    .nav-2-item span.icon {
+        font-size: 1.5rem;
+    }
+    
+    .nav-2-fab {
+        background: var(--accent);
+        color: #000;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-decoration: none;
+        margin-left: auto;
+        box-shadow: 0 4px 15px rgba(74, 222, 128, 0.4);
+    }
+    
+    /* Ensure content doesn't get hidden behind the bottom bar */
+    .screen {
+        padding-bottom: 90px !important;
+    }
+
+    .footer {
+        padding-bottom: 120px !important; /* Prevent bottom app bar from overlapping footer */
     }
 }
 
@@ -335,13 +358,12 @@ button {
     display: inline-block;
     padding: 6px 12px;
     background: rgba(255,255,255,0.05);
-    border: 1px solid var(--border);
     border-radius: 99px;
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.1em;
     color: var(--text-secondary);
-    margin-bottom: 24px;
+    margin-top: 10px;
 }
 
 .pane-title {
@@ -402,8 +424,7 @@ button {
 .btn.secondary {
     background-color: transparent;
     color: var(--text-primary);
-    border: 1px solid var(--border);
-}
+    }
 
 .btn.secondary:hover {
     background-color: var(--bg-hover);
@@ -442,8 +463,6 @@ button {
 input[type="text"] {
     flex: 1 1 200px;
     padding: 12px 16px;
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border);
     border-radius: 12px;
     color: var(--text-primary);
     font-size: 1rem;
@@ -496,8 +515,7 @@ input[type="text"]:focus {
     background: var(--bg-surface);
     padding: 16px 24px;
     border-radius: 16px;
-    border: 1px solid var(--border);
-    margin-bottom: 24px;
+    margin-top: 10px;
 }
 
 .room-header-left {
@@ -527,8 +545,7 @@ input[type="text"]:focus {
     background: var(--bg-surface);
     padding: 32px;
     border-radius: 16px;
-    margin-bottom: 24px;
-    border: 1px solid var(--border);
+    margin-top: 10px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -592,7 +609,7 @@ input[type="text"]:focus {
 /* --- File Selection --- */
 .file-selection {
     text-align: right;
-    margin-bottom: 24px;
+    margin-top: 10px;
 }
 
 .transfers-container {
@@ -632,7 +649,6 @@ input[type="file"] {
     border: 2px dashed var(--border);
     border-radius: 16px;
     cursor: pointer;
-    background-color: var(--bg-surface);
     transition: all 0.2s ease;
     margin-bottom: 16px;
 }
@@ -669,7 +685,6 @@ input[type="file"] {
 /* --- Progress Bars --- */
 .transfer-info {
     background: var(--bg-surface);
-    border: 1px solid var(--border);
     border-radius: 16px;
     padding: 24px;
     margin-bottom: 16px;
@@ -714,7 +729,6 @@ input[type="file"] {
 /* --- Sent Files Dropdown --- */
 .sent-files-dropdown {
     background: var(--bg-main);
-    border: 1px solid var(--border);
     border-radius: 12px;
     margin-top: 16px;
     margin-bottom: 16px;
@@ -768,8 +782,7 @@ input[type="file"] {
     background: var(--bg-main);
     padding: 12px 16px;
     border-radius: 12px;
-    border: 1px solid var(--border);
-}
+    }
 
 .sent-file-chip {
     display: inline-flex;
@@ -778,8 +791,7 @@ input[type="file"] {
     background: var(--bg-surface);
     padding: 6px 12px;
     border-radius: 99px;
-    border: 1px solid var(--border);
-}
+    }
 
 .sent-file-chip .file-name {
     font-size: 0.8rem;
@@ -844,7 +856,7 @@ input[type="file"] {
 .page-content p {
     font-size: 1.125rem;
     color: var(--text-secondary);
-    margin-bottom: 24px;
+    margin-top: 10px;
 }
 
 .page-content strong {
@@ -861,7 +873,6 @@ input[type="file"] {
 
 .feature-card {
     background: var(--bg-surface);
-    border: 1px solid var(--border);
     padding: 32px;
     border-radius: 16px;
 }
@@ -897,7 +908,6 @@ input[type="file"] {
 
 .modal-content {
     background: var(--bg-surface);
-    border: 1px solid var(--border);
     border-radius: 24px;
     padding: 32px;
     width: 100%;
@@ -918,7 +928,7 @@ input[type="file"] {
 
 .modal-content p {
     color: var(--text-secondary);
-    margin-bottom: 24px;
+    margin-top: 10px;
 }
 
 .qr-reader-container {
@@ -927,7 +937,7 @@ input[type="file"] {
     background: #000;
     border-radius: 16px;
     overflow: hidden;
-    margin-bottom: 24px;
+    margin-top: 10px;
 }
 
 .toast-container {
@@ -946,7 +956,6 @@ input[type="file"] {
     align-items: center;
     gap: 12px;
     background: var(--bg-surface);
-    border: 1px solid var(--border);
     padding: 12px 20px;
     border-radius: 99px;
     font-size: 0.9rem;
@@ -974,7 +983,6 @@ input[type="file"] {
     border-radius: 6px;
     font-size: 0.8rem;
     font-weight: 500;
-    border: 1px solid var(--border);
     box-shadow: 0 8px 24px rgba(0,0,0,0.6);
     z-index: 9999;
     pointer-events: none;
@@ -1009,7 +1017,6 @@ input[type="file"] {
 .limit-info-text {
     margin-top: 32px;
     background-color: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--border);
     padding: 16px;
     border-radius: 12px;
     display: flex;
@@ -1210,3 +1217,245 @@ input[type="file"] {
     border-radius: 3px 3px 0 0;
     opacity: 0.85;
 }
+
+/* =========================================
+   GLOWING PORTAL LAYOUT
+   ========================================= */
+.portal-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 350px; /* Slightly taller to fit DropX UI */
+    position: relative;
+}
+
+.portal-line {
+    flex-shrink: 0;
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(to bottom, transparent, var(--accent), transparent);
+    box-shadow: 0 0 20px var(--accent);
+    position: relative;
+    z-index: 2;
+}
+
+.portal-side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+    transition: all 0.4s ease;
+    cursor: pointer;
+    position: relative;
+    height: 100%;
+}
+
+.portal-side:hover {
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.portal-side.left {
+    text-align: right;
+    padding-right: clamp(10px, 3vw, 40px);
+}
+
+.portal-side.right {
+    text-align: left;
+    padding-left: clamp(10px, 3vw, 40px);
+}
+
+.portal-icon {
+    font-size: clamp(2.2rem, 4vw + 0.5rem, 3.5rem) !important;
+    margin-bottom: 10px;
+}
+
+.portal-title {
+    font-size: clamp(1.8rem, 3.5vw + 0.5rem, 3rem);
+    font-weight: 800;
+    letter-spacing: 4px;
+    background: -webkit-linear-gradient(#fff, #888);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.portal-input {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2) !important;
+    color: white !important;
+    font-size: 1.5rem !important;
+    outline: none !important;
+    width: 150px !important;
+    text-align: right !important;
+    transition: width 0.3s, border-color 0.3s !important;
+    border-radius: 0 !important;
+}
+
+.portal-input:focus {
+    width: 200px !important;
+    border-color: var(--accent) !important;
+}
+
+.portal-side:hover~.portal-line {
+    box-shadow: 0 0 40px var(--accent), 0 0 80px #8b5cf6;
+}
+
+@media (max-width: 768px) {
+    .portal-container {
+        flex-direction: column;
+        height: 500px;
+    }
+    .portal-line {
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(to right, transparent, var(--accent), transparent);
+    }
+    .portal-side.left {
+        text-align: center;
+        padding-right: 0;
+        padding-bottom: 40px;
+    }
+    .portal-side.right {
+        text-align: center;
+        padding-left: 0;
+        padding-top: 40px;
+    }
+}
+/* =========================================
+   iOS 17 ACTION MENU MODAL
+   ========================================= */
+.modal-ios17 {
+    width: 370px;
+    box-sizing: border-box;
+    background: #1C1C1E;
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    text-align: left;
+    margin: auto;
+}
+.ios17-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.ios17-icon { width: 40px; height: 40px; background: rgba(10, 132, 255, 0.15); color: #0A84FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.ios17-title-wrap { flex: 1; }
+.ios17-title { font-size: 1rem; font-weight: 600; margin: 0; color: #fff;}
+.ios17-subtitle { font-size: 0.8rem; color: #8E8E93; margin: 2px 0 0 0; }
+.ios17-spinner { width: 16px; height: 16px; border: 2px solid rgba(10, 132, 255, 0.3); border-top-color: #0A84FF; border-radius: 50%; animation: iosSpin 1s linear infinite; }
+@keyframes iosSpin { 100% { transform: rotate(360deg); } }
+
+.ios17-card { background: #000; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; align-items: center; margin-bottom: 16px; }
+.ios17-qr { background: #fff; padding: 10px; border-radius: 12px; margin-bottom: 16px; display: inline-block; }
+.ios17-qr img, .ios17-qr canvas { border-radius: 6px; display: block; }
+.ios17-code { font-size: 1.8rem; font-weight: 700; letter-spacing: 4px; color: #fff;}
+
+.ios17-row { display: flex; background: rgba(255,255,255,0.08); border-radius: 14px; overflow: hidden; margin-bottom: 16px;}
+.ios17-row-btn { flex: 1; background: transparent; border: none; color: #0A84FF; padding: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: 0.2s;}
+.ios17-row-btn:first-child { border-right: 1px solid rgba(255,255,255,0.05); }
+.ios17-row-btn:hover { background: rgba(255,255,255,0.05); }
+
+.ios17-destroy { width: 100%; background: rgba(255, 69, 58, 0.1); border: none; color: #FF453A; padding: 14px; border-radius: 14px; font-weight: 600; cursor: pointer; transition: 0.2s;}
+.ios17-destroy:hover { background: rgba(255, 69, 58, 0.2); }
+
+/* iOS 17 JOIN MODAL INPUT */
+.ios17-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 2rem;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 4px;
+    outline: none;
+    text-transform: uppercase;
+}
+.ios17-input::placeholder {
+    color: rgba(255,255,255,0.2);
+    font-weight: 500;
+}
+.modal-close-btn {
+    background: transparent;
+    border: none;
+    color: #8E8E93;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.modal-close-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+}
+
+/* Modal specific inline styles extracted */
+.modal-ios17-alert {
+    max-width: 320px;
+    padding: 0;
+    text-align: center;
+    overflow: hidden;
+}
+.modal-ios17-alert-content {
+    padding: 24px 20px 20px;
+}
+.modal-ios17-alert-title {
+    margin-bottom: 8px;
+    font-size: 1.1rem;
+}
+.modal-ios17-alert-message {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+.modal-ios17-alert-actions {
+    margin: 0;
+    border-radius: 0;
+    background: transparent;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+.modal-ios17-alert-btn {
+    width: 100%;
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 16px;
+}
+.ios17-card-padded {
+    padding: 15px;
+}
+.modal-room-passcode-input {
+    width: 100%;
+    text-align: center !important;
+    /* font-size: 1.8rem; */
+    font-family: 'Space Grotesk', Consolas, monospace;
+    font-weight: 700;
+    letter-spacing: 8px;
+    text-indent: 8px; /* Compensate for letter-spacing on the right */
+    padding: 15px;
+    margin-bottom: 0;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: #fff;
+    text-transform: uppercase;
+}
+.ios17-qr-card {
+    padding: 0;
+    overflow: hidden;
+    border-radius: 12px;
+    margin-bottom: 15px;
+}
+.ios17-qr-reader {
+    border: none;
+    margin: 0;
+    border-radius: 0;
+    width: 100%;
+}
+
