@@ -37,7 +37,7 @@ Files are transferred directly between peers without ever touching a centralized
 
 ### Prerequisites
 You need a local server environment to run DroperX properly since it requires standard HTTP/S protocols to handle WebRTC connections.
-- [XAMPP](https://www.apachefriends.org/index.html) / [WAMP](https://www.wampserver.com/en/) or a simple Node.js HTTP server.
+- [XAMPP](https://www.apachefriends.org/index.html) / [WAMP](https://www.wampserver.com/en/) or any standard web server.
 
 ### Installation
 
