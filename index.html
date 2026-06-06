@@ -124,40 +124,86 @@
         
         <!-- Hero Right Area (Flip Card) -->
         <div class="hero-right">
+            <div class="toggle-switch" style="margin-bottom: 24px; margin-left: auto; margin-right: auto;" id="sender-toggle">
+                <button id="toggle-send-btn" class="toggle-btn active" onclick="document.getElementById('flip-container').classList.remove('flipped'); this.classList.add('active'); document.getElementById('toggle-receive-btn').classList.remove('active');">Send</button>
+                <button id="toggle-receive-btn" class="toggle-btn" onclick="document.getElementById('flip-container').classList.add('flipped'); this.classList.add('active'); document.getElementById('toggle-send-btn').classList.remove('active');">Receive</button>
+            </div>
             <div class="flip-container" id="flip-container">
                 <div class="flip-card">
                     <!-- SENDER PANE (FRONT) -->
                     <div class="flip-front pane-content">
-                        <div class="toggle-switch" style="margin-bottom: 32px;">
-                            <button class="toggle-btn active">Send</button>
-                            <button class="toggle-btn" onclick="document.getElementById('flip-container').classList.add('flipped')">Receive</button>
+                        <div id="create-room-initial">
+                            <h2 class="pane-title">Create a<br>Secure Room</h2>
+                            <p class="pane-desc">Start a new peer-to-peer session and generate a unique code to share.</p>
+                            <button id="create-room-btn" class="btn primary massive" aria-label="Create a new secure file transfer room">Create Room</button>
                         </div>
-                        <h2 class="pane-title">Create a<br>Secure Room</h2>
-                        <p class="pane-desc">Start a new peer-to-peer session and generate a unique code to share.</p>
-                        <button id="create-room-btn" class="btn primary massive" aria-label="Create a new secure file transfer room">Create Room</button>
-                    </div>
-                    
-                    <!-- RECEIVER PANE (BACK) -->
-                    <div class="flip-back pane-content">
-                        <div class="toggle-switch" style="margin-bottom: 32px;">
-                            <button class="toggle-btn" onclick="document.getElementById('flip-container').classList.remove('flipped')">Send</button>
-                            <button class="toggle-btn active">Receive</button>
-                        </div>
-                        <h2 class="pane-title">Join a<br>Session</h2>
-                        <p class="pane-desc">Enter a Room ID or scan a QR code to connect and receive files.</p>
-                        
-                        <div class="join-controls">
-                            <div class="input-group">
-                                <input type="text" id="room-id-input" placeholder="Enter Room ID" aria-label="Enter the 6-digit room ID to join" />
-                                <button id="join-room-btn" class="btn primary" aria-label="Join the file transfer session">Join</button>
-                            </div>
-                            
-                            <div class="divider"><span>OR</span></div>
-                            
-                            <button id="scan-qr-btn" class="btn secondary" aria-label="Scan QR code using camera to join">
-                                Scan QR Code
-                            </button>
-                        </div>
+                          <div id="create-room-waiting" class="hidden" style="display: flex; flex-direction: column; width: 100%; height: 100%;">
+                              <!-- Header Section -->
+                              <div style="text-align: center; margin-bottom: 24px;">
+                                  <h3 class="pane-title" style="margin-bottom: 6px;">Room Ready</h3>
+                                  <p style="color: var(--text-secondary); font-size: 0.95rem; margin: 0;">Share these details with your peer</p>
+                              </div>
+
+                              <!-- Connection Status (Pulse animation) -->
+                              <div style="display: flex; justify-content: center; margin-bottom: 16px;">
+                                  <div style="display: inline-flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; font-size: 0.9rem; background: rgba(59, 130, 246, 0.1); padding: 8px 16px; border-radius: 30px;">
+                                      <span class="material-symbols-rounded" style="font-size: 1.2rem; animation: pulse 2s infinite;">wifi_tethering</span>
+                                      <span id="connection-status">Waiting for connection...</span>
+                                  </div>
+                              </div>
+
+                              <!-- QR Code (Direct placement) -->
+                              <div style="display: flex; justify-content: center; margin-bottom: 24px;">
+                                  <div style="padding: 12px; background: white; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); display: inline-block;">
+                                      <div id="qrcode-container"></div>
+                                  </div>
+                              </div>
+
+                              <!-- Action Section: Room ID & Share -->
+                              <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: auto;">
+                                  <div style="display: flex; gap: 12px; width: 100%;">
+                                      <!-- Passcode Box -->
+                                      <div style="flex: 1; background: var(--bg-element); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;">
+                                          <span class="room-id-display" id="home-display-room-id" style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); letter-spacing: 3px;">...</span>
+                                          <button id="copy-home-id-btn" class="btn transparent icon-btn" title="Copy Passcode" style="padding: 8px; background: var(--bg-main); border: 1px solid var(--border); border-radius: 10px;">
+                                              <span class="material-symbols-rounded" style="font-size: 1.2rem; color: var(--text-secondary);">content_copy</span>
+                                          </button>
+                                      </div>
+                                      
+                                      <!-- Share Button -->
+                                      <button id="share-link-btn" class="btn secondary" title="Share Link" style="border-radius: 14px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                                          <span class="material-symbols-rounded" style="font-size: 1.4rem;">ios_share</span>
+                                          <span style="font-size: 0.75rem; font-weight: 600;">Share</span>
+                                      </button>
+                                  </div>
+                              </div>
+
+                              <!-- Footer Action -->
+                              <div style="text-align: center; margin-top: 16px;">
+                                  <button id="delete-room-btn" class="btn danger" style="background: transparent; border: none; padding: 8px 16px 24px 16px; font-size: 0.95rem; opacity: 0.8; box-shadow: none; display: inline-flex; align-items: center; justify-content: center; transition: opacity 0.2s;" title="Destroy Room" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">
+                                      Destroy Room
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+                      
+                      <!-- RECEIVER PANE (BACK) -->
+                      <div class="flip-back pane-content">
+                          <h2 class="pane-title">Join a<br>Session</h2>
+                          <p class="pane-desc">Enter a Room ID or scan a QR code to connect and receive files.</p>
+                          
+                          <div class="join-controls" style="width: 100%;">
+                              <div class="input-group">
+                                  <input type="text" id="room-id-input" placeholder="Enter Room ID" aria-label="Enter the 6-digit room ID to join" />
+                                  <button id="join-room-btn" class="btn primary" aria-label="Join the file transfer session">Join</button>
+                              </div>
+                              
+                              <div class="divider"><span>OR</span></div>
+                              
+                              <button id="scan-qr-btn" class="btn secondary" style="width: 100%;" aria-label="Scan QR code using camera to join">
+                                  Scan QR Code
+                              </button>
+                          </div>
                     </div>
                 </div>
             </div>
@@ -166,31 +212,24 @@
 
     <!-- ROOM SCREEN (COMPACT LAYOUT) -->
     <main id="room-screen" class="screen">
-        <div class="room-container">
-
-            <!-- Compact Header -->
-            <div class="room-header">
-                <div class="room-header-left">
-                    <span class="material-symbols-rounded">key</span>
-                    <div class="room-id-display" id="display-room-id" title="Click to copy passcode">...</div>
-                    <div class="status-dot" id="header-status-dot"></div>
+        <div class="room-container desktop-split-layout">
+            
+            <!-- LEFT COLUMN (Desktop) -->
+            <div class="room-col-left">
+                <!-- Compact Header -->
+                <div class="room-header">
+                    <div class="room-header-left">
+                        <span class="material-symbols-rounded">key</span>
+                        <div class="room-id-display" id="display-room-id" title="Click to copy passcode">...</div>
+                        <div class="status-dot" id="header-status-dot"></div>
+                    </div>
+                    <button id="leave-room-btn" class="btn danger icon-btn" title="Leave Room">
+                        <span class="material-symbols-rounded">logout</span>
+                    </button>
                 </div>
-                <button id="leave-room-btn" class="btn danger icon-btn" title="Leave Room">
-                    <span class="material-symbols-rounded">logout</span>
-                </button>
-            </div>
 
-            <!-- Pre-Connection: QR Code and Status -->
-            <div id="qr-wrapper" class="qr-box">
-                <div id="qrcode-container"></div>
-                <p class="qr-hint">Scan QR or enter Room ID to join</p>
-                <p id="connection-status" class="waiting-text">Waiting for a peer...</p>
-            </div>
-
-            <!-- File Transfer Pane (Hidden until connected) -->
-            <div class="room-transfer-pane hidden" id="room-transfer-pane">
-
-                <div class="file-selection hidden" id="file-selection-container">
+                <!-- File Selection (Hidden until connected) -->
+                <div class="file-selection hidden glass-panel" id="file-selection-container">
                     <input type="file" id="file-input" multiple />
                     <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;" />
                     
@@ -209,88 +248,106 @@
                     <button id="send-file-btn" class="btn primary giant" disabled>
                         <span class="material-symbols-rounded">send</span> Send Transfer
                     </button>
-
-                    <!-- Secure Text Drop UI -->
-                    <div class="text-drop-container" style="margin-top: 24px; display: flex; gap: 10px;">
-                        <input type="text" id="textMessageInput" placeholder="Type a secure message, link, or password..." style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-light);" />
-                        <button id="sendTextBtn" class="btn secondary" disabled>Send Text</button>
-                    </div>
                 </div>
 
+                                    <!-- Send Progress UI Moved here -->
+                        <div class="transfer-info hidden" id="send-progress-container">
+                            <div class="transfer-header">
+                                <p id="send-status">Sending...</p>
+                                <p id="send-progress-text">0%</p>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="send-progress-fill" class="progress-fill"></div>
+                            </div>
+                            <div class="speed-eta-info" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
+                                <span id="send-speed">0 MB/s</span>
+                                <span id="send-eta">--:--</span>
+                            </div>
+                            <div class="chart-container" style="margin-top: 15px; height: 60px;">
+                                <canvas id="sendSpeedChart"></canvas>
+                            </div>
+                            <div class="transfer-controls">
+                                <button id="pause-transfer-btn" class="btn secondary hidden" aria-label="Pause or Resume transfer">
+                                    <span class="material-symbols-rounded">pause</span> Pause
+                                </button>
+                                <button id="cancel-transfer-btn" class="btn danger hidden" aria-label="Cancel transfer">
+                                    <span class="material-symbols-rounded">cancel</span> Cancel
+                                </button>
+                            </div>
+                        </div>
+
+                        <details class="sent-files-dropdown hidden" id="sent-files-dropdown">
+                            <summary>
+                                <span>Sent Files</span>
+                                <span class="material-symbols-rounded dropdown-icon">expand_more</span>
+                            </summary>
+                            <div id="sent-files-container"></div>
+                        </details>
+            </div>
+
+
+            <!-- RIGHT COLUMN (Desktop) -->
+            <div class="room-col-right">
+                
+
+
                 <!-- Transfers Area (Send & Receive) -->
-                <div class="transfers-container">
-                    <div class="transfer-info hidden" id="send-progress-container">
-                        <div class="transfer-header">
-                            <p id="send-status">Sending...</p>
-                            <p id="send-progress-text">0%</p>
-                        </div>
-                        <div class="progress-bar">
-                            <div id="send-progress-fill" class="progress-fill"></div>
-                        </div>
-                        <div class="speed-eta-info" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
-                            <span id="send-speed">0 MB/s</span>
-                            <span id="send-eta">--:--</span>
-                        </div>
-                        <div class="chart-container" style="margin-top: 15px; height: 60px;">
-                            <canvas id="sendSpeedChart"></canvas>
-                        </div>
-                        <div class="transfer-controls">
-                            <button id="pause-transfer-btn" class="btn secondary hidden" aria-label="Pause or Resume transfer">
-                                <span class="material-symbols-rounded">pause</span> Pause
-                            </button>
-                            <button id="cancel-transfer-btn" class="btn danger hidden" aria-label="Cancel transfer">
-                                <span class="material-symbols-rounded">cancel</span> Cancel
-                            </button>
-                        </div>
+                <div class="room-transfer-pane hidden" id="room-transfer-pane">
+                    
+                    <!-- Secure Text Drop UI -->
+                    <div class="text-drop-container glass-panel" style="margin-bottom: 24px; display: flex; gap: 10px; padding: 0;">
+                        <input type="text" id="textMessageInput" placeholder="Type a secure message, link, or password..." style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-light);" />
+                        <button id="sendTextBtn" class="btn secondary icon-btn" disabled title="Send Text"><span class="material-symbols-rounded">send</span></button>
                     </div>
 
-                    <!-- Sent Files Dropdown -->
-                    <details class="sent-files-dropdown hidden" id="sent-files-dropdown">
-                        <summary>
-                            <span>Sent Files</span>
-                            <span class="material-symbols-rounded dropdown-icon">expand_more</span>
-                        </summary>
-                        <div id="sent-files-container"></div>
-                    </details>
+                    <div class="transfers-container">
 
-                    <div class="transfer-info hidden" id="receive-progress-container">
-                        <div class="transfer-header">
-                            <p id="receive-status">Receiving...</p>
-                            <p id="receive-progress-text">0%</p>
-                        </div>
-                        <div class="progress-bar">
-                            <div id="receive-progress-fill" class="progress-fill"></div>
-                        </div>
-                        <div class="speed-eta-info" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
-                            <span id="receive-speed">0 MB/s</span>
-                            <span id="receive-eta">--:--</span>
-                        </div>
-                        <div class="chart-container" style="margin-top: 15px; height: 60px;">
-                            <canvas id="receiveSpeedChart"></canvas>
+
+                        <!-- Sent Files Dropdown -->
+
+
+                        <div class="transfer-info hidden" id="receive-progress-container">
+                            <div class="transfer-header">
+                                <p id="receive-status">Receiving...</p>
+                                <p id="receive-progress-text">0%</p>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="receive-progress-fill" class="progress-fill"></div>
+                            </div>
+                            <div class="speed-eta-info" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
+                                <span id="receive-speed">0 MB/s</span>
+                                <span id="receive-eta">--:--</span>
+                            </div>
+                            <div class="chart-container" style="margin-top: 15px; height: 60px;">
+                                <canvas id="receiveSpeedChart"></canvas>
+                            </div>
+
+                            <div class="download-list-header hidden" id="download-list-header">
+                                <h4>Received Files</h4>
+                                <button id="clear-downloads-btn" class="btn danger icon-btn small"
+                                    title="Clear Received Files"><span
+                                        class="material-symbols-rounded">delete</span></button>
+                            </div>
+                            <div id="download-links-container"></div>
                         </div>
 
-                        <div class="download-list-header hidden" id="download-list-header">
-                            <h4>Received Files</h4>
-                            <button id="clear-downloads-btn" class="btn danger icon-btn small"
-                                title="Clear Received Files"><span
-                                    class="material-symbols-rounded">delete</span></button>
-                        </div>
-                        <div id="download-links-container"></div>
-                    </div>
-
-                    <!-- Received Text Toast -->
-                    <div id="received-text-container" class="hidden" style="margin-top: 20px; padding: 15px; background: rgba(37, 99, 235, 0.1); border-left: 4px solid var(--accent); border-radius: 8px;">
-                        <h4 style="margin-bottom: 8px;">Secure Message Received</h4>
-                        <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 10px;">
-                            <p id="received-text-content" style="font-family: monospace; color: var(--text-light); word-break: break-all; margin: 0; flex: 1;"></p>
-                            <button id="copy-text-btn" class="btn primary icon-btn small" style="flex-shrink: 0;" title="Copy Text"><span class="material-symbols-rounded">content_copy</span></button>
+                        <!-- Received Text Toast -->
+                        <div id="received-text-container" class="hidden" style="padding: 15px; background: rgba(37, 99, 235, 0.1); border-left: 4px solid var(--accent); border-radius: 8px;">
+                            <h4 style="margin-bottom: 8px;">Secure Message Received</h4>
+                            <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                                <p id="received-text-content" style="font-family: monospace; color: var(--text-light); word-break: break-all; margin: 0; flex: 1;"></p>
+                                <button id="copy-text-btn" class="btn transparent icon-btn small" style="flex-shrink: 0;" title="Copy Text"><span class="material-symbols-rounded">content_copy</span></button>
+                                <button id="clear-text-btn" class="btn transparent icon-btn small" style="flex-shrink: 0; color: var(--danger);" title="Clear Text"><span class="material-symbols-rounded">delete</span></button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
         </div>
     </main>
 
+    
     <!-- TOAST CONTAINER -->
     <div id="toast-container" class="toast-container"></div>
 

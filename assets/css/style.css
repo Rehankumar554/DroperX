@@ -131,6 +131,7 @@ button {
     flex: 1;
     width: 100%;
     overflow-y: auto; /* Scroll internally to avoid navbar overlap */
+    overflow-x: hidden; /* Prevent horizontal scrollbars during 3D flip animation */
 }
 
 .screen.active {
@@ -187,22 +188,25 @@ button {
 .hero-right {
     flex: 1;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     width: 100%;
+    padding: 30px 0; /* Add padding to prevent vertical overflow during 3D flip */
 }
 
 /* Flip Card 3D Setup */
 .flip-container {
     perspective: 1000px;
     width: 100%;
-    max-width: 480px; /* Slightly widened from 440px for a more substantial look */
-    height: 480px; /* Reduced to fit within most standard viewports and prevent scroll */
+    max-width: 400px;
+    height: 480px;
 }
 
 .flip-card {
     width: 100%;
     height: 100%;
+    display: grid;
     position: relative;
     transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
     transform-style: preserve-3d;
@@ -215,9 +219,7 @@ button {
 .flip-front, .flip-back {
     width: 100%;
     height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
+    grid-area: 1 / 1;
     backface-visibility: hidden;
     background-color: var(--surface);
     border: 1px solid var(--border);
@@ -227,7 +229,8 @@ button {
     flex-direction: column;
     align-items: center;
     box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-    overflow-y: auto; /* Allow scrolling if content still overflows on small heights */
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 /* Hide scrollbar for flip faces */
@@ -251,6 +254,7 @@ button {
     padding: 4px;
     margin-bottom: 16px;
     width: 100%;
+    max-width: 240px;
 }
 
 .toggle-btn {
@@ -277,8 +281,11 @@ button {
 }
 
 .pane-content {
-    max-width: 440px;
+    max-width: 100%;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .hidden {
@@ -314,7 +321,7 @@ button {
     .flip-container {
         height: 460px;
         width: 100%;
-        max-width: 100%;
+        max-width: 400px;
     }
 
     .pane-content {
@@ -374,6 +381,21 @@ button {
 .btn.primary {
     background-color: var(--accent);
     color: white;
+}
+
+
+.btn.transparent {
+    background-color: transparent !important;
+    border: none !important;
+    color: var(--text-light) !important;
+}
+.btn.transparent:hover {
+    background-color: rgba(255,255,255,0.1) !important;
+}
+
+#received-text-container {
+    margin-top: 20px;
+    margin-bottom: 20px;
 }
 
 .btn.primary:hover {
@@ -641,7 +663,7 @@ input[type="file"] {
 }
 
 #file-details {
-    margin-bottom: 16px;
+    margin: 16px 0px;
     font-size: 0.9rem;
     color: var(--success);
     font-weight: 500;
@@ -1028,6 +1050,7 @@ input[type="file"] {
     .desktop-split-layout {
         flex-direction: row;
         align-items: flex-start;
+        justify-content: center;
         gap: 32px;
     }
     .room-col-left {
@@ -1039,11 +1062,28 @@ input[type="file"] {
         gap: 24px;
         position: sticky;
         top: 20px;
+        padding-bottom: 16px;
+    }
+    .room-col-left .room-header,
+    .room-col-left .upload-options,
+    .room-col-left .file-label-massive,
+    .room-col-left .file-selection,
+    .room-col-left .transfer-info {
+        margin-bottom: 0 !important;
+    }
+    .room-col-left .sent-files-dropdown {
+        margin-top: 0 !important;
+    }
+    #received-text-container {
+        margin-bottom: 0 !important;
     }
     .room-col-right {
-        flex: 2;
+        flex: 1;
+        min-width: 450px;
+        max-width: 500px;
         display: flex;
         flex-direction: column;
         gap: 24px;
+        padding-bottom: 16px;
     }
 }

@@ -70,6 +70,38 @@ const connectionStatus = document.getElementById('connection-status');
 const fileInput = document.getElementById('file-input');
 const fileDetails = document.getElementById('file-details');
 const sendFileBtn = document.getElementById('send-file-btn');
+const sendTextBtn = document.getElementById('sendTextBtn');
+const textMessageInput = document.getElementById('textMessageInput');
+const receivedTextContainer = document.getElementById('received-text-container');
+const receivedTextContent = document.getElementById('received-text-content');
+const copyTextBtn = document.getElementById('copy-text-btn');
+
+if (sendTextBtn) {
+    sendTextBtn.addEventListener('click', () => {
+        if (!dataConnection || !dataConnection.open) return;
+        const text = textMessageInput.value.trim();
+        if (text) {
+            dataConnection.send(JSON.stringify({
+                command: 'TEXT_MESSAGE',
+                text: text
+            }));
+            textMessageInput.value = '';
+            showToast('Message sent!', 'success');
+        }
+    });
+}
+if (copyTextBtn) {
+    copyTextBtn.addEventListener('click', () => {
+        if (receivedTextContent && receivedTextContent.innerText) {
+            navigator.clipboard.writeText(receivedTextContent.innerText).then(() => {
+                showToast('Text copied to clipboard!', 'success');
+            }).catch(err => {
+                showToast('Failed to copy text', 'error');
+            });
+        }
+    });
+}
+
 const leaveRoomBtn = document.getElementById('leave-room-btn');
 const sendProgressContainer = document.getElementById('send-progress-container');
 const sendProgressFill = document.getElementById('send-progress-fill');
@@ -151,6 +183,66 @@ displayRoomId.addEventListener('click', () => {
     }
 });
 
+const homeDisplayRoomId = document.getElementById('home-display-room-id');
+const copyHomeIdBtn = document.getElementById('copy-home-id-btn');
+
+if (homeDisplayRoomId) {
+    homeDisplayRoomId.addEventListener('click', () => {
+        if (roomId) {
+            navigator.clipboard.writeText(roomId).then(() => {
+                showToast('Passcode Copied!', 'success');
+            });
+        }
+    });
+}
+if (copyHomeIdBtn) {
+    copyHomeIdBtn.addEventListener('click', () => {
+        if (roomId) {
+            navigator.clipboard.writeText(roomId).then(() => {
+                showToast('Passcode Copied!', 'success');
+            });
+        }
+    });
+}
+
+const deleteRoomBtn = document.getElementById('delete-room-btn');
+if (deleteRoomBtn) {
+    deleteRoomBtn.addEventListener('click', () => {
+        if (peer) {
+            peer.destroy();
+            peer = null;
+        }
+        roomId = null;
+        createRoomBtn.disabled = false;
+        createRoomBtn.innerHTML = 'Create Room';
+        
+        document.getElementById('sender-toggle').style.display = 'flex';
+        document.getElementById('create-room-initial').classList.remove('hidden');
+        document.getElementById('create-room-waiting').classList.add('hidden');
+        showToast('Room deleted successfully.', 'info');
+    });
+}
+
+const shareLinkBtn = document.getElementById('share-link-btn');
+if (shareLinkBtn) {
+    shareLinkBtn.addEventListener('click', () => {
+        if (roomId) {
+            const joinUrl = window.location.href.split('?')[0] + "?room=" + roomId;
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Join my Secure Room',
+                    text: 'Click the link to join my secure file transfer room',
+                    url: joinUrl,
+                }).catch(console.error);
+            } else {
+                navigator.clipboard.writeText(joinUrl).then(() => {
+                    showToast('Room link copied to clipboard!', 'success');
+                });
+            }
+        }
+    });
+}
+
 // PeerJS Variables
 let peer = null;
 let dataConnection = null;
@@ -160,7 +252,7 @@ let serviceWorkerRegistration = null;
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then(reg => {
         serviceWorkerRegistration = reg;
-        console.log('Service Worker Registered');
+        // console.log('Service Worker Registered');
     }).catch(err => {
         console.warn('Service Worker Registration Failed:', err);
     });
@@ -254,13 +346,18 @@ function initPeer(id) {
         createRoomBtn.innerHTML = 'Create Room';
         roomId = id;
         displayRoomId.innerText = id;
-        showScreen(roomScreen);
         
         // If we created a new room (no existing connection yet)
         if (!dataConnection) {
-            qrCodeContainer.innerHTML = "";
+            document.getElementById('sender-toggle').style.display = 'none';
+            document.getElementById('create-room-initial').classList.add('hidden');
+            document.getElementById('create-room-waiting').classList.remove('hidden');
+            document.getElementById('home-display-room-id').innerText = id;
+            
+            const qrContainer = document.getElementById('qrcode-container');
+            qrContainer.innerHTML = "";
             const joinUrl = window.location.href.split('?')[0] + "?room=" + id;
-            new QRCode(qrCodeContainer, {
+            new QRCode(qrContainer, {
                 text: joinUrl,
                 width: 220,
                 height: 220,
@@ -268,7 +365,9 @@ function initPeer(id) {
                 colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.L
             });
-            connectionStatus.innerText = "Waiting for a peer to join...";
+            if (connectionStatus) connectionStatus.innerText = "Waiting for a peer to join...";
+        } else {
+            showScreen(roomScreen);
         }
     });
 
@@ -276,6 +375,7 @@ function initPeer(id) {
         // Someone joined our room
         if (dataConnection) return; // Already connected
         dataConnection = conn;
+        showScreen(roomScreen);
         setupDataConnection();
     });
     
@@ -401,7 +501,11 @@ function setupDataConnection() {
         if (roomTransferPane) roomTransferPane.classList.remove('hidden');
         
         fileSelectionContainer.classList.remove('hidden');
-        qrWrapper.classList.add('hidden');
+        if (qrWrapper) qrWrapper.classList.add('hidden');
+        
+        const sendTextBtn = document.getElementById('sendTextBtn');
+        if(sendTextBtn) sendTextBtn.disabled = false;
+
         downloadLinksContainer.innerHTML = '';
         sentFilesContainer.innerHTML = '';
         downloadListHeader.classList.add('hidden');
@@ -442,10 +546,44 @@ function setupDataConnection() {
         }
 
         if (parsed && parsed.command) {
+            if (parsed.command === 'FILE_DONE') {
+                if (fileStream) {
+                    try { await fileStream.close(); } catch(e){}
+                    fileStream = null;
+                    
+                    receiveProgressContainer.classList.add('state-success');
+                    receiveStatus.innerText = `Saved: ${sanitizeHTML(fileMeta.name)}`;
+                    addReceivedFileRow(fileMeta.name, null, true);
+                } else if (fileMeta && fileMeta.isZipStream) {
+                    finalizeReceive();
+                }
+                
+                setTimeout(() => {
+                    receiveProgressContainer.classList.add('hidden');
+                    receiveProgressContainer.classList.remove('state-success');
+                }, 3000);
+                return;
+            }
+            if (parsed.command === 'TEXT_MESSAGE') {
+                const txtContainer = document.getElementById('received-text-container');
+                const txtContent = document.getElementById('received-text-content');
+                if (txtContainer && txtContent) {
+                    txtContainer.classList.remove('hidden');
+                    txtContent.innerText = parsed.text;
+                    showToast('Secure message received', 'success');
+                }
+                return;
+            }
+
             if (parsed.command === 'CANCEL_TRANSFER') {
+                isTransferCancelled = true;
                 receiveStatus.innerText = "Transfer Cancelled by Sender!";
                 receiveProgressContainer.classList.add('state-error');
                 receiveBuffer = [];
+                if (fileStream) {
+                    try { fileStream.abort(); } catch(e){}
+                    fileStream = null;
+                }
                 setTimeout(() => {
                     receiveProgressContainer.classList.add('hidden');
                     receiveProgressContainer.classList.remove('state-error');
@@ -481,6 +619,9 @@ function setupDataConnection() {
                 receiveBuffer = [];
                 receivedSize = 0;
                 isTransferCancelled = false;
+                
+                receiveStartTime = 0; lastReceiveTime = 0; lastReceiveBytes = 0;
+                if(receiveChart) { receiveChart.data.labels=[]; receiveChart.data.datasets[0].data=[]; receiveChart.update('none'); }
                 
                 receiveProgressContainer.classList.remove('hidden', 'state-error', 'state-success');
                 if (fileMeta.isZipStream || (fileMeta.type === 'application/zip' && fileMeta.name.endsWith('.zip'))) {
@@ -541,6 +682,7 @@ function setupDataConnection() {
             }
         } else {
             // Must be a file chunk
+            if (isTransferCancelled) return;
             let bufferToDecrypt = data;
             if (data instanceof Blob) {
                 bufferToDecrypt = await data.arrayBuffer();
@@ -566,6 +708,7 @@ function setupDataConnection() {
                         addReceivedFileRow(fileMeta.name, null, true); // True flag = streaming done
                     }
                 } catch(e) {
+                    if (isTransferCancelled) return;
                     console.error("Stream write error:", e);
                     showToast("Streaming failed. Connection lost?", "error");
                 }
@@ -683,7 +826,10 @@ pauseTransferBtn.addEventListener('click', () => {
 
 cancelTransferBtn.addEventListener('click', () => {
     isTransferCancelled = true;
+    isWaitingForAccept = false;
+    isPaused = false;
     cancelTransferBtn.classList.add('hidden');
+    pauseTransferBtn.classList.add('hidden');
     
     if (dataConnection && dataConnection.open) {
         dataConnection.send(JSON.stringify({ command: 'CANCEL_TRANSFER' }));
@@ -700,7 +846,6 @@ cancelTransferBtn.addEventListener('click', () => {
         fileDetails.innerText = '';
         selectedFiles = [];
         isTransferring = false;
-        fileInput.disabled = false;
     }, 3000);
 });
 
@@ -748,6 +893,18 @@ fileInput.addEventListener('change', (e) => {
     handleFileSelection(e.target.files);
 });
 
+function interceptFileSelection(e) {
+    if (isTransferring) {
+        e.preventDefault();
+        showToast('Cannot select new files while a transfer is in progress.', 'error');
+    }
+}
+fileInput.addEventListener('click', interceptFileSelection);
+const fInput = document.getElementById('folder-input');
+if (fInput) {
+    fInput.addEventListener('click', interceptFileSelection);
+}
+
 // --- Drag and Drop Feature ---
 ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
     roomScreen.addEventListener(eventName, preventDefaults, false);
@@ -793,8 +950,9 @@ sendFileBtn.addEventListener('click', () => {
     isTransferring = true;
     isTransferCancelled = false;
     isPaused = false;
+    sendStartTime = 0; lastSendTime = 0; lastSendBytes = 0;
+    if(sendChart) { sendChart.data.labels=[]; sendChart.data.datasets[0].data=[]; sendChart.update('none'); }
     pauseTransferBtn.innerHTML = '<span class="material-symbols-rounded">pause</span> Pause';
-    fileInput.disabled = true;
     sendFileBtn.disabled = true;
     sendProgressContainer.classList.remove('hidden');
     cancelTransferBtn.classList.remove('hidden');
@@ -825,7 +983,6 @@ function sendNextFile() {
             fileDetails.innerText = '';
             selectedFiles = [];
             isTransferring = false;
-            fileInput.disabled = false;
         }, 3000);
         return;
     }
@@ -917,16 +1074,108 @@ function sendNextFile() {
     checkPauseAndRead();
 }
 
+let sendStartTime = 0;
+let lastSendTime = 0;
+let lastSendBytes = 0;
+
+let receiveStartTime = 0;
+let lastReceiveTime = 0;
+let lastReceiveBytes = 0;
+
+function formatETA(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return "--:--";
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+}
+
 function updateSendProgress(current, total) {
     const percent = Math.min(Math.round((current / total) * 100), 100);
     sendProgressFill.style.width = percent + '%';
     sendProgressText.innerText = percent + '%';
+    
+    const now = Date.now();
+    if (current === 0 || lastSendTime === 0 || sendStartTime === 0) {
+        sendStartTime = now;
+        lastSendTime = now;
+        lastSendBytes = current;
+        return;
+    }
+    
+    if (now - lastSendTime >= 500 || current === total) {
+        const timeDiff = (now - lastSendTime) / 1000;
+        const bytesDiff = current - lastSendBytes;
+        
+        if (timeDiff > 0) {
+            const speedBps = bytesDiff / timeDiff;
+            const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
+            const speedSpan = document.getElementById('send-speed');
+            if(speedSpan) speedSpan.innerText = `${speedMBps} MB/s`;
+            
+            const remainingBytes = total - current;
+            const etaSeconds = speedBps > 0 ? Math.ceil(remainingBytes / speedBps) : 0;
+            const etaSpan = document.getElementById('send-eta');
+            if(etaSpan) etaSpan.innerText = formatETA(etaSeconds);
+            
+            if (sendChart) {
+                sendChart.data.labels.push('');
+                sendChart.data.datasets[0].data.push(speedMBps);
+                if (sendChart.data.labels.length > 20) {
+                    sendChart.data.labels.shift();
+                    sendChart.data.datasets[0].data.shift();
+                }
+                sendChart.update('none');
+            }
+        }
+        
+        lastSendTime = now;
+        lastSendBytes = current;
+    }
 }
 
 function updateReceiveProgress(current, total) {
     const percent = Math.min(Math.round((current / total) * 100), 100);
     receiveProgressFill.style.width = percent + '%';
     receiveProgressText.innerText = percent + '%';
+
+    const now = Date.now();
+    if (current === 0 || lastReceiveTime === 0 || receiveStartTime === 0) {
+        receiveStartTime = now;
+        lastReceiveTime = now;
+        lastReceiveBytes = current;
+        return;
+    }
+    
+    if (now - lastReceiveTime >= 500 || current === total) {
+        const timeDiff = (now - lastReceiveTime) / 1000;
+        const bytesDiff = current - lastReceiveBytes;
+        
+        if (timeDiff > 0) {
+            const speedBps = bytesDiff / timeDiff;
+            const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
+            const rSpeedSpan = document.getElementById('receive-speed');
+            if(rSpeedSpan) rSpeedSpan.innerText = `${speedMBps} MB/s`;
+            
+            const remainingBytes = total - current;
+            const etaSeconds = speedBps > 0 ? Math.ceil(remainingBytes / speedBps) : 0;
+            const rEtaSpan = document.getElementById('receive-eta');
+            if(rEtaSpan) rEtaSpan.innerText = formatETA(etaSeconds);
+            
+            if (receiveChart) {
+                receiveChart.data.labels.push('');
+                receiveChart.data.datasets[0].data.push(speedMBps);
+                if (receiveChart.data.labels.length > 20) {
+                    receiveChart.data.labels.shift();
+                    receiveChart.data.datasets[0].data.shift();
+                }
+                receiveChart.update('none');
+            }
+        }
+        
+        lastReceiveTime = now;
+        lastReceiveBytes = current;
+    }
 }
 
 function addReceivedFileRow(fileName, fileUrl, isStreamed = false) {
@@ -953,7 +1202,7 @@ function addReceivedFileRow(fileName, fileUrl, isStreamed = false) {
         actions.appendChild(streamedBadge);
     } else {
         const downloadBtn = document.createElement('a');
-        downloadBtn.className = 'btn primary icon-btn small';
+        downloadBtn.className = 'btn transparent icon-btn small';
         downloadBtn.href = fileUrl;
         downloadBtn.download = fileName;
         downloadBtn.innerHTML = '<span class="material-symbols-rounded">download</span>';
@@ -964,8 +1213,6 @@ function addReceivedFileRow(fileName, fileUrl, isStreamed = false) {
     row.appendChild(actions);
     downloadLinksContainer.appendChild(row);
 }
-
-// Empty to delete the function
 
 function addSentFileRow(name) {
     const safeName = sanitizeHTML(name);
@@ -1023,7 +1270,7 @@ function resetUI() {
 
 async function sendFolderStream() {
     const { name, totalSize } = window.folderTransferMeta;
-    sendStatus.innerText = \Zipping & Transferring Folder: \;
+    sendStatus.innerText = `Zipping & Transferring Folder: ${name}`;
     sendProgressContainer.classList.remove('state-error', 'state-success');
     
     const metadata = {
@@ -1037,7 +1284,7 @@ async function sendFolderStream() {
     };
     dataConnection.send(metadata);
     isWaitingForAccept = true;
-    sendStatus.innerText = \Initializing transfer: \...\;
+    sendStatus.innerText = `Initializing transfer: ${name}...`;
 
     while (isWaitingForAccept && !isTransferCancelled) {
         await new Promise(r => setTimeout(r, 100));
@@ -1046,6 +1293,8 @@ async function sendFolderStream() {
     if (isTransferCancelled) return;
     
     let offset = 0;
+    const chunkQueue = [];
+    let isZippingDone = false;
     
     const zip = new fflate.Zip((err, dat, final) => {
         if (err) {
@@ -1053,19 +1302,50 @@ async function sendFolderStream() {
             return;
         }
         if (dat && dat.length > 0) {
-            offset += dat.length;
-            updateSendProgress(offset, totalSize);
-            const chunk = dat.buffer.slice(dat.byteOffset, dat.byteOffset + dat.byteLength);
-            encryptChunk(chunk).then(encrypted => {
-                dataConnection.send(encrypted);
-            });
+            // copy the buffer because fflate reuses it
+            chunkQueue.push(new Uint8Array(dat));
         }
         if (final) {
-            dataConnection.send({ command: 'FILE_DONE' });
-            currentFileIndex = selectedFiles.length; 
-            sendNextFile(); 
+            isZippingDone = true;
         }
     });
+
+    const sendLoop = async () => {
+        while (!isTransferCancelled) {
+            if (isPaused || isWaitingForAccept) {
+                await new Promise(r => setTimeout(r, 100));
+                continue;
+            }
+            if (chunkQueue.length > 0) {
+                const chunk = chunkQueue.shift();
+                
+                while (!isTransferCancelled && dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
+                    await new Promise(r => setTimeout(r, 50));
+                }
+                if (isTransferCancelled) break;
+                
+                offset += chunk.length;
+                updateSendProgress(offset, totalSize);
+                
+                const encrypted = await encryptChunk(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
+                dataConnection.send(encrypted);
+                
+            } else if (isZippingDone) {
+                if (!isTransferCancelled) {
+                    dataConnection.send({ command: 'FILE_DONE' });
+                    addSentFileRow(name);
+                    currentFileIndex = selectedFiles.length; 
+                    sendNextFile(); 
+                }
+                break;
+            } else {
+                await new Promise(r => setTimeout(r, 10));
+            }
+        }
+    };
+    
+    // Start the sender loop
+    sendLoop();
 
     for (let i = 0; i < selectedFiles.length; i++) {
         if (isTransferCancelled) break;
@@ -1083,7 +1363,8 @@ async function sendFolderStream() {
                 zipStream.push(new Uint8Array(0), true);
                 break;
             }
-            while (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
+            // Prevent zip streaming from getting too far ahead of sending
+            while (!isTransferCancelled && chunkQueue.length > 50) {
                 await new Promise(r => setTimeout(r, 50));
             }
             zipStream.push(value);
@@ -1095,9 +1376,193 @@ async function sendFolderStream() {
 }
 
 
-const folderInput = document.getElementById('folderInput');
+const folderInput = document.getElementById('folder-input');
 if (folderInput) {
     folderInput.addEventListener('change', (e) => {
         handleFolderSelection(e.target.files);
+    });
+}
+
+// ==========================================
+// DEMO MODE FOR UI DEBUGGING
+// ==========================================
+function enableDemoMode() {
+    console.log('Demo mode activated!');
+    
+    // Switch to room screen
+    homeScreen.classList.remove('active');
+    roomScreen.classList.add('active');
+    document.getElementById('display-room-id').innerText = 'DEMO-123';
+    document.getElementById('header-status-dot').className = 'status-dot online';
+
+    // Show left and right columns
+    if (qrWrapper) qrWrapper.classList.add('hidden');
+    fileSelectionContainer.classList.remove('hidden');
+    document.getElementById('room-transfer-pane').classList.remove('hidden');
+
+    // Make charts visible and initialize them
+    initCharts();
+
+    // Setup dummy Send Progress
+    sendProgressContainer.classList.remove('hidden');
+    document.getElementById('send-status').innerText = 'Sending: demo_video.mp4';
+    document.getElementById('send-progress-text').innerText = '65%';
+    document.getElementById('send-progress-fill').style.width = '65%';
+    document.getElementById('send-speed').innerText = '12.5 MB/s';
+    document.getElementById('send-eta').innerText = '00:15 left';
+    
+    // Setup dummy Receive Progress
+    receiveProgressContainer.classList.remove('hidden');
+    document.getElementById('receive-status').innerText = 'Receiving: project_assets.zip';
+    document.getElementById('receive-progress-text').innerText = '32%';
+    document.getElementById('receive-progress-fill').style.width = '32%';
+    document.getElementById('receive-speed').innerText = '8.2 MB/s';
+    document.getElementById('receive-eta').innerText = '01:05 left';
+
+    // Populate charts with dummy data
+    if (sendChart) {
+        sendChart.data.labels = Array.from({length: 20}, (_, i) => i);
+        sendChart.data.datasets[0].data = Array.from({length: 20}, () => Math.random() * 20 + 5);
+        sendChart.update();
+    }
+    if (receiveChart) {
+        receiveChart.data.labels = Array.from({length: 20}, (_, i) => i);
+        receiveChart.data.datasets[0].data = Array.from({length: 20}, () => Math.random() * 15 + 2);
+        receiveChart.update();
+    }
+
+    // Add dummy Sent Files
+    const sentFilesDropdown = document.getElementById('sent-files-dropdown');
+    if(sentFilesDropdown) {
+        sentFilesDropdown.classList.remove('hidden');
+        document.getElementById('sent-files-container').innerHTML = `
+            <div class="file-row state-success">
+                <span class="material-symbols-rounded file-icon">description</span>
+                <div class="file-info">
+                    <span class="file-name">document.pdf</span>
+                    <span class="file-size">2.4 MB</span>
+                </div>
+                <span class="status-text">Done</span>
+            </div>
+            <div class="file-row state-success">
+                <span class="material-symbols-rounded file-icon">image</span>
+                <div class="file-info">
+                    <span class="file-name">vacation_photo.jpg</span>
+                    <span class="file-size">4.1 MB</span>
+                </div>
+                <span class="status-text">Done</span>
+            </div>
+        `;
+    }
+
+    // Add dummy Received Files
+    downloadListHeader.classList.remove('hidden');
+    downloadLinksContainer.innerHTML = `
+        <div class="file-row state-success">
+            <span class="material-symbols-rounded file-icon">audio_file</span>
+            <div class="file-info">
+                <span class="file-name">song.mp3</span>
+                <span class="file-size">5.8 MB</span>
+            </div>
+            <button class="btn transparent icon-btn small"><span class="material-symbols-rounded">download</span></button>
+        </div>
+        <div class="file-row state-success">
+            <span class="material-symbols-rounded file-icon">folder_zip</span>
+            <div class="file-info">
+                <span class="file-name">source_code.zip</span>
+                <span class="file-size">15.2 MB</span>
+            </div>
+            <button class="btn transparent icon-btn small"><span class="material-symbols-rounded">download</span></button>
+        </div>
+    `;
+
+    // Show Text Drop
+    const txtContainer = document.getElementById('received-text-container');
+    if (txtContainer) {
+        txtContainer.classList.remove('hidden');
+        document.getElementById('received-text-content').innerText = 'https://github.com/DroperX/repo';
+    }
+}
+
+// Automatically trigger if ?demo=1
+if (window.location.search.includes('demo=1')) {
+    // Wait for DOM to be ready
+    setTimeout(() => {
+        enableDemoMode();
+    }, 500);
+}
+
+// ==========================================
+// CHART.JS INITIALIZATION
+// ==========================================
+let sendChart = null;
+let receiveChart = null;
+
+function initCharts() {
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js not loaded yet.');
+        return;
+    }
+
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+            x: { display: false },
+            y: { display: false, beginAtZero: true }
+        },
+        elements: {
+            point: { radius: 0 },
+            line: { tension: 0.4, borderWidth: 2 }
+        }
+    };
+
+    const sendCtx = document.getElementById('sendSpeedChart');
+    if (sendCtx && !sendChart) {
+        sendChart = new Chart(sendCtx, {
+            type: 'line',
+            data: {
+                labels: Array(20).fill(''),
+                datasets: [{
+                    data: Array(20).fill(0),
+                    borderColor: '#4ade80',
+                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    fill: true
+                }]
+            },
+            options: chartOptions
+        });
+    }
+
+    const receiveCtx = document.getElementById('receiveSpeedChart');
+    if (receiveCtx && !receiveChart) {
+        receiveChart = new Chart(receiveCtx, {
+            type: 'line',
+            data: {
+                labels: Array(20).fill(''),
+                datasets: [{
+                    data: Array(20).fill(0),
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true
+                }]
+            },
+            options: chartOptions
+        });
+    }
+}
+
+// Initialize charts for normal use
+setTimeout(initCharts, 500);
+
+
+const clearTextBtn = document.getElementById('clear-text-btn');
+if (clearTextBtn) {
+    clearTextBtn.addEventListener('click', () => {
+        const receivedTextContent = document.getElementById('received-text-content');
+        const receivedTextContainer = document.getElementById('received-text-container');
+        if (receivedTextContent) receivedTextContent.innerText = '';
+        if (receivedTextContainer) receivedTextContainer.classList.add('hidden');
     });
 }
