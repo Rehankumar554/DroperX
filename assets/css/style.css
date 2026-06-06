@@ -91,9 +91,6 @@ button {
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    position: sticky;
-    top: 0;
-    z-index: 1000;
 }
 
 .brand-logo {
@@ -106,6 +103,7 @@ button {
 .brand-logo a {
     color: var(--text-primary);
     text-decoration: none;
+    font-size: inherit;
 }
 
 .brand-logo .highlight {
@@ -131,8 +129,9 @@ button {
 /* --- Screens --- */
 .screen {
     display: none !important;
-    flex: 1;
     width: 100%;
+    height: calc(100vh - var(--nav-height));
+    overflow-y: auto;
     overflow-x: hidden; /* Prevent horizontal scrollbars during 3D flip animation */
 }
 
@@ -1102,13 +1101,36 @@ input[type="file"] {
 }
 
 .footer-content {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 24px;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1.5fr;
+    gap: 40px;
     width: 100%;
     max-width: 1200px;
+}
+
+@media (max-width: 900px) {
+    .footer-content {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .footer-content {
+        grid-template-columns: 1fr;
+        gap: 32px;
+    }
+}
+
+.footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.footer-col h4 {
+    color: var(--text-primary);
+    font-size: 1.05rem;
+    margin-bottom: 8px;
 }
 
 .footer-brand p {
@@ -1118,20 +1140,15 @@ input[type="file"] {
     max-width: 300px;
 }
 
-.footer-links {
-    display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
-}
-
-.footer-links a {
+.footer-col a {
     color: var(--text-secondary);
     text-decoration: none;
     font-size: 0.95rem;
     transition: color 0.2s;
+    width: fit-content;
 }
 
-.footer-links a:hover {
+.footer-col a:hover {
     color: var(--text-primary);
 }
 
@@ -1143,4 +1160,11 @@ input[type="file"] {
     padding-top: 24px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     margin-top: 16px;
+}
+
+
+/* Fix for brand logo inside footer overriding footer-col link styles */
+.footer-col .brand-logo a {
+    font-size: inherit;
+    color: var(--text-primary);
 }

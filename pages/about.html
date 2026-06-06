@@ -5,26 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About DroperX - Secure P2P File Transfer</title>
     
-    <!-- Primary Meta Tags -->
     <meta name="description" content="Learn more about DroperX, our mission to provide secure, unlimited, and direct peer-to-peer file transfers, and the technology behind it.">
     <meta name="keywords" content="about DroperX, secure file sharing, P2P file transfer, WebRTC transfer, peer-to-peer technology">
     <meta name="author" content="DroperX">
     <meta name="robots" content="index, follow">
     
-    <!-- Canonical URL -->
     <link rel="canonical" href="https://droperx.vercel.app/pages/about.html" />
 
-    <!-- Strict Security: Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:;">
 
-    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://droperx.vercel.app/pages/about.html">
     <meta property="og:title" content="About DroperX - Secure P2P File Transfer">
     <meta property="og:description" content="Learn more about DroperX, our mission to provide secure, unlimited, and direct peer-to-peer file transfers.">
     <meta property="og:image" content="https://droperx.vercel.app/assets/images/logo.png">
     
-    <!-- Favicons for Google Search & Browsers -->
     <link rel="icon" type="image/png" href="../assets/images/favicon/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="../assets/images/favicon/favicon.svg" />
     <link rel="shortcut icon" href="../assets/images/favicon/favicon.ico" />
@@ -32,16 +27,12 @@
     <link rel="manifest" href="../assets/images/favicon/site.webmanifest" />
 
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
 
-    <!-- Vercel Web Analytics -->
-    <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
     
-    <!-- Vercel Speed Insights -->
-    <script>
-        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/speed-insights/script.js"></script>
+    
+    
 </head>
 <body class="content-page">
     <nav class="navbar">
@@ -49,53 +40,107 @@
         <div class="nav-links">
             <a href="../index.html">Home</a>
             <a href="about.html" class="active">About</a>
-            <a href="legal.html">Legal</a>
+            <a href="disclaimer.html">Disclaimer</a>
         </div>
     </nav>
 
-    <main class="page-container">
-        <h1 class="page-title">The Future of <br>File Transfer.</h1>
-        
-        <div class="page-content">
-            <p>Welcome to <strong>DroperX</strong>, the ultimate solution for fast, secure, and hassle-free file sharing. Our mission is to break down the barriers of data transfer, providing a seamless experience across all your devices.</p>
+    <main class="page-container" style="max-width: 900px; margin: 0 auto; padding: 40px 20px;">
+        <!-- Hero Intro -->
+        <div style="text-align: center; margin-bottom: 60px;">
+            <h1 class="page-title" style="margin-bottom: 24px; font-size: clamp(2.5rem, 5vw, 4rem);">The Future of <br>File Transfer.</h1>
+            <p style="font-size: 1.15rem; color: var(--text-secondary); max-width: 700px; margin: 0 auto; line-height: 1.6;">Welcome to <strong>DroperX</strong>. Our mission is to break down the barriers of data transfer by providing a seamless, limitless, and highly secure experience across all your devices.</p>
+        </div>
+
+        <!-- Core Technology Sections -->
+        <div class="about-sections" style="display: flex; flex-direction: column; gap: 60px; margin-bottom: 80px;">
             
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <h3>Peer-to-Peer Architecture</h3>
-                    <p>DroperX establishes a direct WebRTC connection between your devices. No middlemen, no cloud storage limits, just pure unthrottled speed.</p>
-                </div>
-                <div class="feature-card">
-                    <h3>Zero Data Retention</h3>
-                    <p>Your files are never uploaded to a centralized server. The moment you close the app, your session is permanently destroyed. True privacy by design.</p>
-                </div>
-                <div class="feature-card">
-                    <h3>Cross-Platform Seamlessness</h3>
-                    <p>Whether you're on a desktop, tablet, or mobile phone, DroperX adapts instantly. Scan a QR code or enter a Room ID to start transferring instantly.</p>
-                </div>
-                <div class="feature-card">
-                    <h3>No File Size Limits</h3>
-                    <p>Because files are transferred directly between peers and never stored on a server, you can send files of any size—gigabytes or terabytes—without restrictions.</p>
+            <div class="about-row" style="display: flex; gap: 24px; align-items: flex-start; border-left: 4px solid var(--accent); padding-left: 24px; background: linear-gradient(90deg, rgba(37, 99, 235, 0.05) 0%, transparent 100%); padding-top: 16px; padding-bottom: 16px; border-radius: 0 16px 16px 0;">
+                <span class="material-symbols-rounded" style="font-size: 40px; color: var(--accent); margin-top: 4px;">router</span>
+                <div style="flex: 1;">
+                    <h2 style="font-size: 1.6rem; margin-bottom: 12px; color: var(--text-primary);">Peer-to-Peer Architecture</h2>
+                    <p style="font-size: 1.05rem; color: var(--text-secondary); line-height: 1.6;">DroperX completely eliminates the middleman. By utilizing advanced WebRTC protocols, we establish a direct, unthrottled connection between the sender and the receiver. No cloud storage limits, no artificial speed caps—just pure, direct transfer.</p>
                 </div>
             </div>
-            
-            <a href="../index.html" class="btn primary" style="max-width: 200px; margin-top: 40px;">Start a Session</a>
+
+            <div class="about-row" style="display: flex; gap: 24px; align-items: flex-start; border-left: 4px solid #10b981; padding-left: 24px; background: linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%); padding-top: 16px; padding-bottom: 16px; border-radius: 0 16px 16px 0;">
+                <span class="material-symbols-rounded" style="font-size: 40px; color: #10b981; margin-top: 4px;">security</span>
+                <div style="flex: 1;">
+                    <h2 style="font-size: 1.6rem; margin-bottom: 12px; color: var(--text-primary);">Zero Data Retention</h2>
+                    <p style="font-size: 1.05rem; color: var(--text-secondary); line-height: 1.6;">Your privacy is our highest priority. Files are never uploaded to any centralized server or database. The data flows directly between the two connected devices, and the moment you close the tab, the session and all its data are permanently destroyed.</p>
+                </div>
+            </div>
+
+            <div class="about-row" style="display: flex; gap: 24px; align-items: flex-start; border-left: 4px solid #f59e0b; padding-left: 24px; background: linear-gradient(90deg, rgba(245, 158, 11, 0.05) 0%, transparent 100%); padding-top: 16px; padding-bottom: 16px; border-radius: 0 16px 16px 0;">
+                <span class="material-symbols-rounded" style="font-size: 40px; color: #f59e0b; margin-top: 4px;">devices</span>
+                <div style="flex: 1;">
+                    <h2 style="font-size: 1.6rem; margin-bottom: 12px; color: var(--text-primary);">Cross-Platform Seamlessness</h2>
+                    <p style="font-size: 1.05rem; color: var(--text-secondary); line-height: 1.6;">Whether you're sharing files between a Windows desktop, a Mac, an iPad, or an Android phone, DroperX adapts instantly. Simply scan a QR code or share a 6-digit Room ID to start transferring instantly across any modern web browser.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Developer Section -->
+        <div class="developer-section" style="background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 40px 24px; margin-bottom: 60px; display: flex; flex-direction: column; align-items: center; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, var(--accent), #9333ea); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);">
+                <span class="material-symbols-rounded" style="font-size: 40px; color: #fff;">code</span>
+            </div>
+            <h2 style="font-size: 1.8rem; margin-bottom: 12px;">Meet the Developers</h2>
+            <p style="font-size: 1.05rem; color: var(--text-secondary); margin-bottom: 24px; max-width: 600px; line-height: 1.6;">DroperX was passionately designed and engineered by <strong>Rehan Kumar</strong> and the team at <strong>RKS Development Studio</strong>. We believe in building open, blazingly fast, and privacy-first tools for the modern web.</p>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;">
+                <a href="https://github.com/Rehankumar554" target="_blank" class="btn secondary" style="display: flex; align-items: center; gap: 8px;">
+                    <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" style="width: 18px; filter: invert(1);"> Rehan's GitHub
+                </a>
+                <a href="mailto:rksdevelopmentstudio@gmail.com" class="btn primary" style="display: flex; align-items: center; gap: 8px;">
+                    <span class="material-symbols-rounded" style="font-size: 18px;">mail</span> Contact Team
+                </a>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-bottom: 40px;">
+            <a href="../index.html" class="btn primary" style="display: inline-block; width: fit-content; padding: 16px 40px; font-size: 1.1rem; border-radius: 30px;">Start a Session Now</a>
         </div>
     </main>
+
     <footer class="footer">
         <div class="footer-content">
-            <div class="footer-brand">
-                <a href="../index.html" style="text-decoration:none; color:var(--text-primary); font-weight:800; font-size:1.2rem;">Droper<span class="highlight">X</span></a>
-                <p style="color:var(--text-secondary); font-size:0.85rem; margin-top:8px;">Fast, secure, and limitless P2P file sharing.</p>
+            <div class="footer-col brand-col">
+                <div class="brand-logo" style="margin-bottom: 4px;"><a href="../index.html">Droper<span class="highlight">X</span></a></div>
+                <p style="color:var(--text-secondary); font-size:0.85rem; margin-top:12px; line-height: 1.5;">Fast, secure, and limitless P2P file sharing.</p>
+                <div style="margin-top: 16px; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #10b981;">
+                    <span class="material-symbols-rounded" style="font-size: 16px;">lock</span>
+                    <span>End-to-End Encrypted</span>
+                </div>
             </div>
-            <div class="footer-links">
-                <a href="about.html">About</a>
-                <a href="legal.html">Legal</a>
-                <a href="privacy.html">Privacy Policy</a>
+            <div class="footer-col">
+                <h4>Quick Links</h4>
+                <a href="../index.html">Home</a>
+                <a href="about.html">About Us</a>
+                <a href="faq.html">FAQ & Help</a>
+            </div>
+            <div class="footer-col">
+                <h4>Legal</h4>
                 <a href="terms.html">Terms of Service</a>
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="disclaimer.html">Disclaimer</a>
+            </div>
+            <div class="footer-col">
+                <h4>Connect</h4>
+                <a href="https://github.com/Rehankumar554/DroperX" target="_blank" style="display: flex; align-items: center; gap: 8px;">
+                    <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" style="width: 16px; filter: invert(1);"> GitHub
+                </a>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <a href="mailto:rksdevelopmentstudio@gmail.com" style="display: flex; align-items: center; gap: 8px;">
+                        <span class="material-symbols-rounded" style="font-size: 16px;">mail</span> Contact Us
+                    </a>
+                    <span style="font-size: 0.85rem; color: var(--text-secondary); margin-left: 24px; user-select: text;">rksdevelopmentstudio@gmail.com</span>
+                </div>
             </div>
         </div>
         <div class="footer-bottom">
-            &copy; 2026 DroperX. All rights reserved.
+            <div style="margin-bottom: 6px;">&copy; 2026 DroperX. All rights reserved.</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap;">
+                Built with <span style="color: #ef4444; font-size: 1.1rem; line-height: 1; display: flex; align-items: center; padding-top: 2px;">&hearts;</span> by <strong>Rehan Kumar</strong> & <strong>RKS Development Studio</strong>
+            </div>
         </div>
     </footer>
 </body>

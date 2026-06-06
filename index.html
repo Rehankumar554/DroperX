@@ -7,18 +7,20 @@
     <title>DroperX - Secure P2P File Transfer</title>
 
     <meta name="google-site-verification" content="ABQIfxRUrDx4-AK65zLkYZ07KQMriMB6oAmzltJsLQc" />
-    
+
     <!-- Primary Meta Tags -->
-    <meta name="description" content="DroperX is a fast, secure, and purely peer-to-peer file transfer protocol. Share files instantly across devices without server storage limitations.">
-    
+    <meta name="description"
+        content="DroperX is a fast, secure, and purely peer-to-peer file transfer protocol. Share files instantly across devices without server storage limitations.">
+
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#050505">
     <link rel="apple-touch-icon" href="assets/images/icon.png">
-    <meta name="keywords" content="file transfer, WebRTC, P2P file sharing, secure file drop, DroperX, peer-to-peer transfer, share files online, send large files">
+    <meta name="keywords"
+        content="file transfer, WebRTC, P2P file sharing, secure file drop, DroperX, peer-to-peer transfer, share files online, send large files">
     <meta name="author" content="DroperX">
     <meta name="robots" content="index, follow">
-    
+
     <!-- Mobile Browser Optimization -->
     <meta name="theme-color" content="#050505">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -26,13 +28,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <!-- Strict Security: Content Security Policy -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.vercel-insights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' wss://0.peerjs.com https://0.peerjs.com turn:* https://unpkg.com https://*.vercel-insights.com; frame-src 'self';">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' wss://0.peerjs.com https://0.peerjs.com turn:* https://unpkg.com; frame-src 'self';">
 
     <!-- Performance Optimizations (Core Web Vitals) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://unpkg.com">
-    
+
     <!-- Canonical URL -->
     <link rel="canonical" href="https://droperx.vercel.app/" />
 
@@ -40,14 +43,16 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://droperx.vercel.app/">
     <meta property="og:title" content="DroperX - Secure P2P File Transfer">
-    <meta property="og:description" content="Share files instantly and securely across devices using our direct peer-to-peer WebRTC protocol. No file size limits, no server storage.">
+    <meta property="og:description"
+        content="Share files instantly and securely across devices using our direct peer-to-peer WebRTC protocol. No file size limits, no server storage.">
     <meta property="og:image" content="assets/images/logo.png">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://droperx.vercel.app/">
     <meta property="twitter:title" content="DroperX - Secure P2P File Transfer">
-    <meta property="twitter:description" content="Share files instantly and securely across devices using our direct peer-to-peer WebRTC protocol.">
+    <meta property="twitter:description"
+        content="Share files instantly and securely across devices using our direct peer-to-peer WebRTC protocol.">
     <meta property="twitter:image" content="assets/images/logo.png">
 
     <!-- Favicons for Google Search & Browsers -->
@@ -97,12 +102,13 @@
         <div class="nav-links">
             <a href="index.html" class="active" aria-current="page">Home</a>
             <a href="pages/about.html">About</a>
-            <a href="pages/legal.html">Legal</a>
+            <a href="pages/disclaimer.html">Disclaimer</a>
         </div>
     </nav>
 
     <!-- Invisible H1 for SEO keyword dominance -->
-    <h1 style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;">
+    <h1
+        style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;">
         DroperX - Fast, Unlimited, and Secure Peer-to-Peer File Transfer Online
     </h1>
 
@@ -113,20 +119,25 @@
             <div class="hero-branding">
                 <div class="hero-logo-text">DroperX</div>
                 <h1 class="hero-title">Unlimited Secure<br>File Sharing</h1>
-                <p class="hero-desc">Fast, private, and limitless peer-to-peer file transfers directly from your browser.</p>
+                <p class="hero-desc">Fast, private, and limitless peer-to-peer file transfers directly from your
+                    browser.</p>
             </div>
-            
+
             <div class="limit-info-text">
                 <span class="material-symbols-rounded">info</span>
-                <p><strong>File Transfer Limits:</strong> Chrome, Edge, and Opera support <b>Unlimited</b> file sizes. Firefox and Safari are limited to <b>~1.5 GB</b>.</p>
+                <p><strong>File Transfer Limits:</strong> Chrome, Edge, and Opera support <b>Unlimited</b> file sizes.
+                    Firefox and Safari are limited to <b>~1.5 GB</b>.</p>
             </div>
         </div>
-        
+
         <!-- Hero Right Area (Flip Card) -->
         <div class="hero-right">
-            <div class="toggle-switch" style="margin-bottom: 24px; margin-left: auto; margin-right: auto;" id="sender-toggle">
-                <button id="toggle-send-btn" class="toggle-btn active" onclick="document.getElementById('flip-container').classList.remove('flipped'); this.classList.add('active'); document.getElementById('toggle-receive-btn').classList.remove('active');">Send</button>
-                <button id="toggle-receive-btn" class="toggle-btn" onclick="document.getElementById('flip-container').classList.add('flipped'); this.classList.add('active'); document.getElementById('toggle-send-btn').classList.remove('active');">Receive</button>
+            <div class="toggle-switch" style="margin-bottom: 24px; margin-left: auto; margin-right: auto;"
+                id="sender-toggle">
+                <button id="toggle-send-btn" class="toggle-btn active"
+                    onclick="document.getElementById('flip-container').classList.remove('flipped'); this.classList.add('active'); document.getElementById('toggle-receive-btn').classList.remove('active');">Send</button>
+                <button id="toggle-receive-btn" class="toggle-btn"
+                    onclick="document.getElementById('flip-container').classList.add('flipped'); this.classList.add('active'); document.getElementById('toggle-send-btn').classList.remove('active');">Receive</button>
             </div>
             <div class="flip-container" id="flip-container">
                 <div class="flip-card">
@@ -134,76 +145,96 @@
                     <div class="flip-front pane-content">
                         <div id="create-room-initial">
                             <h2 class="pane-title">Create a<br>Secure Room</h2>
-                            <p class="pane-desc">Start a new peer-to-peer session and generate a unique code to share.</p>
-                            <button id="create-room-btn" class="btn primary massive" aria-label="Create a new secure file transfer room">Create Room</button>
+                            <p class="pane-desc">Start a new peer-to-peer session and generate a unique code to share.
+                            </p>
+                            <button id="create-room-btn" class="btn primary massive"
+                                aria-label="Create a new secure file transfer room">Create Room</button>
                         </div>
-                          <div id="create-room-waiting" class="hidden" style="display: flex; flex-direction: column; width: 100%; height: 100%;">
-                              <!-- Header Section -->
-                              <div style="text-align: center; margin-bottom: 24px;">
-                                  <h3 class="pane-title" style="margin-bottom: 6px;">Room Ready</h3>
-                                  <p style="color: var(--text-secondary); font-size: 0.95rem; margin: 0;">Share these details with your peer</p>
-                              </div>
+                        <div id="create-room-waiting" class="hidden"
+                            style="display: flex; flex-direction: column; width: 100%; height: 100%;">
+                            <!-- Header Section -->
+                            <div style="text-align: center; margin-bottom: 24px;">
+                                <h3 class="pane-title" style="margin-bottom: 6px;">Room Ready</h3>
+                                <p style="color: var(--text-secondary); font-size: 0.95rem; margin: 0;">Share these
+                                    details with your peer</p>
+                            </div>
 
-                              <!-- Connection Status (Pulse animation) -->
-                              <div style="display: flex; justify-content: center; margin-bottom: 16px;">
-                                  <div style="display: inline-flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; font-size: 0.9rem; background: rgba(59, 130, 246, 0.1); padding: 8px 16px; border-radius: 30px;">
-                                      <span class="material-symbols-rounded" style="font-size: 1.2rem; animation: pulse 2s infinite;">wifi_tethering</span>
-                                      <span id="connection-status">Waiting for connection...</span>
-                                  </div>
-                              </div>
+                            <!-- Connection Status (Pulse animation) -->
+                            <div style="display: flex; justify-content: center; margin-bottom: 16px;">
+                                <div
+                                    style="display: inline-flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; font-size: 0.9rem; background: rgba(59, 130, 246, 0.1); padding: 8px 16px; border-radius: 30px;">
+                                    <span class="material-symbols-rounded"
+                                        style="font-size: 1.2rem; animation: pulse 2s infinite;">wifi_tethering</span>
+                                    <span id="connection-status">Waiting for connection...</span>
+                                </div>
+                            </div>
 
-                              <!-- QR Code (Direct placement) -->
-                              <div style="display: flex; justify-content: center; margin-bottom: 24px;">
-                                  <div style="padding: 12px; background: white; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); display: inline-block;">
-                                      <div id="qrcode-container"></div>
-                                  </div>
-                              </div>
+                            <!-- QR Code (Direct placement) -->
+                            <div style="display: flex; justify-content: center; margin-bottom: 24px;">
+                                <div
+                                    style="padding: 12px; background: white; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); display: inline-block;">
+                                    <div id="qrcode-container"></div>
+                                </div>
+                            </div>
 
-                              <!-- Action Section: Room ID & Share -->
-                              <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: auto;">
-                                  <div style="display: flex; gap: 12px; width: 100%;">
-                                      <!-- Passcode Box -->
-                                      <div style="flex: 1; background: var(--bg-element); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;">
-                                          <span class="room-id-display" id="home-display-room-id" style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); letter-spacing: 3px;">...</span>
-                                          <button id="copy-home-id-btn" class="btn transparent icon-btn" title="Copy Passcode" style="padding: 8px; background: var(--bg-main); border: 1px solid var(--border); border-radius: 10px;">
-                                              <span class="material-symbols-rounded" style="font-size: 1.2rem; color: var(--text-secondary);">content_copy</span>
-                                          </button>
-                                      </div>
-                                      
-                                      <!-- Share Button -->
-                                      <button id="share-link-btn" class="btn secondary" title="Share Link" style="border-radius: 14px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
-                                          <span class="material-symbols-rounded" style="font-size: 1.4rem;">ios_share</span>
-                                          <span style="font-size: 0.75rem; font-weight: 600;">Share</span>
-                                      </button>
-                                  </div>
-                              </div>
+                            <!-- Action Section: Room ID & Share -->
+                            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: auto;">
+                                <div style="display: flex; gap: 12px; width: 100%;">
+                                    <!-- Passcode Box -->
+                                    <div
+                                        style="flex: 1; background: var(--bg-element); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;">
+                                        <span class="room-id-display" id="home-display-room-id"
+                                            style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); letter-spacing: 3px;">...</span>
+                                        <button id="copy-home-id-btn" class="btn transparent icon-btn"
+                                            title="Copy Passcode"
+                                            style="padding: 8px; background: var(--bg-main); border: 1px solid var(--border); border-radius: 10px;">
+                                            <span class="material-symbols-rounded"
+                                                style="font-size: 1.2rem; color: var(--text-secondary);">content_copy</span>
+                                        </button>
+                                    </div>
 
-                              <!-- Footer Action -->
-                              <div style="text-align: center; margin-top: 16px;">
-                                  <button id="delete-room-btn" class="btn danger" style="background: transparent; border: none; padding: 8px 16px 24px 16px; font-size: 0.95rem; opacity: 0.8; box-shadow: none; display: inline-flex; align-items: center; justify-content: center; transition: opacity 0.2s;" title="Destroy Room" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">
-                                      Destroy Room
-                                  </button>
-                              </div>
-                          </div>
-                      </div>
-                      
-                      <!-- RECEIVER PANE (BACK) -->
-                      <div class="flip-back pane-content">
-                          <h2 class="pane-title">Join a<br>Session</h2>
-                          <p class="pane-desc">Enter a Room ID or scan a QR code to connect and receive files.</p>
-                          
-                          <div class="join-controls" style="width: 100%;">
-                              <div class="input-group">
-                                  <input type="text" id="room-id-input" placeholder="Enter Room ID" aria-label="Enter the 6-digit room ID to join" />
-                                  <button id="join-room-btn" class="btn primary" aria-label="Join the file transfer session">Join</button>
-                              </div>
-                              
-                              <div class="divider"><span>OR</span></div>
-                              
-                              <button id="scan-qr-btn" class="btn secondary" style="width: 100%;" aria-label="Scan QR code using camera to join">
-                                  Scan QR Code
-                              </button>
-                          </div>
+                                    <!-- Share Button -->
+                                    <button id="share-link-btn" class="btn secondary" title="Share Link"
+                                        style="border-radius: 14px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                                        <span class="material-symbols-rounded"
+                                            style="font-size: 1.4rem;">ios_share</span>
+                                        <span style="font-size: 0.75rem; font-weight: 600;">Share</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Footer Action -->
+                            <div style="text-align: center; margin-top: 16px;">
+                                <button id="delete-room-btn" class="btn danger"
+                                    style="background: transparent; border: none; padding: 8px 16px 24px 16px; font-size: 0.95rem; opacity: 0.8; box-shadow: none; display: inline-flex; align-items: center; justify-content: center; transition: opacity 0.2s;"
+                                    title="Destroy Room" onmouseover="this.style.opacity='1'"
+                                    onmouseout="this.style.opacity='0.8'">
+                                    Destroy Room
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RECEIVER PANE (BACK) -->
+                    <div class="flip-back pane-content">
+                        <h2 class="pane-title">Join a<br>Session</h2>
+                        <p class="pane-desc">Enter a Room ID or scan a QR code to connect and receive files.</p>
+
+                        <div class="join-controls" style="width: 100%;">
+                            <div class="input-group">
+                                <input type="text" id="room-id-input" placeholder="Enter Room ID"
+                                    aria-label="Enter the 6-digit room ID to join" />
+                                <button id="join-room-btn" class="btn primary"
+                                    aria-label="Join the file transfer session">Join</button>
+                            </div>
+
+                            <div class="divider"><span>OR</span></div>
+
+                            <button id="scan-qr-btn" class="btn secondary" style="width: 100%;"
+                                aria-label="Scan QR code using camera to join">
+                                Scan QR Code
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -213,7 +244,7 @@
     <!-- ROOM SCREEN (COMPACT LAYOUT) -->
     <main id="room-screen" class="screen">
         <div class="room-container desktop-split-layout">
-            
+
             <!-- LEFT COLUMN (Desktop) -->
             <div class="room-col-left">
                 <!-- Compact Header -->
@@ -232,14 +263,16 @@
                 <div class="file-selection hidden glass-panel" id="file-selection-container">
                     <input type="file" id="file-input" multiple />
                     <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;" />
-                    
+
                     <div class="upload-options" style="display: flex; gap: 16px; margin-bottom: 20px;">
                         <label for="file-input" class="file-label-massive" style="flex: 1;">
                             <span class="material-symbols-rounded upload-icon">cloud_upload</span>
                             <span class="title">Select Files</span>
                         </label>
-                        <label for="folder-input" class="file-label-massive" style="flex: 1; border-color: var(--accent);">
-                            <span class="material-symbols-rounded upload-icon" style="color: var(--accent);">folder_open</span>
+                        <label for="folder-input" class="file-label-massive"
+                            style="flex: 1; border-color: var(--accent);">
+                            <span class="material-symbols-rounded upload-icon"
+                                style="color: var(--accent);">folder_open</span>
                             <span class="title">Select Folder</span>
                         </label>
                     </div>
@@ -250,54 +283,60 @@
                     </button>
                 </div>
 
-                                    <!-- Send Progress UI Moved here -->
-                        <div class="transfer-info hidden" id="send-progress-container">
-                            <div class="transfer-header">
-                                <p id="send-status">Sending...</p>
-                                <p id="send-progress-text">0%</p>
-                            </div>
-                            <div class="progress-bar">
-                                <div id="send-progress-fill" class="progress-fill"></div>
-                            </div>
-                            <div class="speed-eta-info" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
-                                <span id="send-speed">0 MB/s</span>
-                                <span id="send-eta">--:--</span>
-                            </div>
-                            <div class="chart-container" style="margin-top: 15px; height: 60px;">
-                                <canvas id="sendSpeedChart"></canvas>
-                            </div>
-                            <div class="transfer-controls">
-                                <button id="pause-transfer-btn" class="btn secondary hidden" aria-label="Pause or Resume transfer">
-                                    <span class="material-symbols-rounded">pause</span> Pause
-                                </button>
-                                <button id="cancel-transfer-btn" class="btn danger hidden" aria-label="Cancel transfer">
-                                    <span class="material-symbols-rounded">cancel</span> Cancel
-                                </button>
-                            </div>
-                        </div>
+                <!-- Send Progress UI Moved here -->
+                <div class="transfer-info hidden" id="send-progress-container">
+                    <div class="transfer-header">
+                        <p id="send-status">Sending...</p>
+                        <p id="send-progress-text">0%</p>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="send-progress-fill" class="progress-fill"></div>
+                    </div>
+                    <div class="speed-eta-info"
+                        style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
+                        <span id="send-speed">0 MB/s</span>
+                        <span id="send-eta">--:--</span>
+                    </div>
+                    <div class="chart-container" style="margin-top: 15px; height: 60px;">
+                        <canvas id="sendSpeedChart"></canvas>
+                    </div>
+                    <div class="transfer-controls">
+                        <button id="pause-transfer-btn" class="btn secondary hidden"
+                            aria-label="Pause or Resume transfer">
+                            <span class="material-symbols-rounded">pause</span> Pause
+                        </button>
+                        <button id="cancel-transfer-btn" class="btn danger hidden" aria-label="Cancel transfer">
+                            <span class="material-symbols-rounded">cancel</span> Cancel
+                        </button>
+                    </div>
+                </div>
 
-                        <details class="sent-files-dropdown hidden" id="sent-files-dropdown">
-                            <summary>
-                                <span>Sent Files</span>
-                                <span class="material-symbols-rounded dropdown-icon">expand_more</span>
-                            </summary>
-                            <div id="sent-files-container"></div>
-                        </details>
+                <details class="sent-files-dropdown hidden" id="sent-files-dropdown">
+                    <summary>
+                        <span>Sent Files</span>
+                        <span class="material-symbols-rounded dropdown-icon">expand_more</span>
+                    </summary>
+                    <div id="sent-files-container"></div>
+                </details>
             </div>
 
 
             <!-- RIGHT COLUMN (Desktop) -->
             <div class="room-col-right">
-                
+
 
 
                 <!-- Transfers Area (Send & Receive) -->
                 <div class="room-transfer-pane hidden" id="room-transfer-pane">
-                    
+
                     <!-- Secure Text Drop UI -->
-                    <div class="text-drop-container glass-panel" style="margin-bottom: 24px; display: flex; gap: 10px; padding: 0;">
-                        <input type="text" id="textMessageInput" placeholder="Type a secure message, link, or password..." style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-light);" />
-                        <button id="sendTextBtn" class="btn secondary icon-btn" disabled title="Send Text"><span class="material-symbols-rounded">send</span></button>
+                    <div class="text-drop-container glass-panel"
+                        style="margin-bottom: 24px; display: flex; gap: 10px; padding: 0;">
+                        <input type="text" id="textMessageInput"
+                            placeholder="Type a secure message, link, or password..."
+                            style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-light);" />
+                        <button id="sendTextBtn" class="btn secondary icon-btn" disabled title="Send Text"><span
+                                class="material-symbols-rounded">send</span></button>
                     </div>
 
                     <div class="transfers-container">
@@ -314,7 +353,8 @@
                             <div class="progress-bar">
                                 <div id="receive-progress-fill" class="progress-fill"></div>
                             </div>
-                            <div class="speed-eta-info" style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
+                            <div class="speed-eta-info"
+                                style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: #888;">
                                 <span id="receive-speed">0 MB/s</span>
                                 <span id="receive-eta">--:--</span>
                             </div>
@@ -332,12 +372,20 @@
                         </div>
 
                         <!-- Received Text Toast -->
-                        <div id="received-text-container" class="hidden" style="padding: 15px; background: rgba(37, 99, 235, 0.1); border-left: 4px solid var(--accent); border-radius: 8px;">
+                        <div id="received-text-container" class="hidden"
+                            style="padding: 15px; background: rgba(37, 99, 235, 0.1); border-left: 4px solid var(--accent); border-radius: 8px;">
                             <h4 style="margin-bottom: 8px;">Secure Message Received</h4>
-                            <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 10px;">
-                                <p id="received-text-content" style="font-family: monospace; color: var(--text-light); word-break: break-all; margin: 0; flex: 1;"></p>
-                                <button id="copy-text-btn" class="btn transparent icon-btn small" style="flex-shrink: 0;" title="Copy Text"><span class="material-symbols-rounded">content_copy</span></button>
-                                <button id="clear-text-btn" class="btn transparent icon-btn small" style="flex-shrink: 0; color: var(--danger);" title="Clear Text"><span class="material-symbols-rounded">delete</span></button>
+                            <div
+                                style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                                <p id="received-text-content"
+                                    style="font-family: monospace; color: var(--text-light); word-break: break-all; margin: 0; flex: 1;">
+                                </p>
+                                <button id="copy-text-btn" class="btn transparent icon-btn small"
+                                    style="flex-shrink: 0;" title="Copy Text"><span
+                                        class="material-symbols-rounded">content_copy</span></button>
+                                <button id="clear-text-btn" class="btn transparent icon-btn small"
+                                    style="flex-shrink: 0; color: var(--danger);" title="Clear Text"><span
+                                        class="material-symbols-rounded">delete</span></button>
                             </div>
                         </div>
                     </div>
@@ -347,7 +395,7 @@
         </div>
     </main>
 
-    
+
     <!-- TOAST CONTAINER -->
     <div id="toast-container" class="toast-container"></div>
 
@@ -371,44 +419,71 @@
                 <button id="cancel-scan-btn" class="btn danger">Cancel</button>
             </div>
         </div>
-        <div id="incoming-file-modal" class="modal-backdrop hidden" aria-hidden="true">
-            <div class="modal-content">
-                <span class="material-symbols-rounded modal-icon" style="color: var(--accent);">downloading</span>
-                <h3 id="incoming-modal-title">Incoming File</h3>
-                <p id="incoming-modal-message">Do you want to accept this file?</p>
-                <div class="modal-actions" style="display: flex; gap: 12px; margin-top: 24px;">
-                    <button id="incoming-accept-btn" class="btn primary" style="flex: 1;">Accept</button>
-                    <button id="incoming-decline-btn" class="btn secondary" style="flex: 1;">Decline</button>
-                </div>
+    </div>
+    
+    <div id="incoming-file-modal" class="modal-backdrop hidden" aria-hidden="true">
+        <div class="modal-content">
+            <span class="material-symbols-rounded modal-icon" style="color: var(--accent);">downloading</span>
+            <h3 id="incoming-modal-title">Incoming File</h3>
+            <p id="incoming-modal-message">Do you want to accept this file?</p>
+            <div class="modal-actions" style="display: flex; gap: 12px; margin-top: 24px;">
+                <button id="incoming-accept-btn" class="btn primary" style="flex: 1;">Accept</button>
+                <button id="incoming-decline-btn" class="btn secondary" style="flex: 1;">Decline</button>
             </div>
         </div>
+    </div>
     </main>
 
-    <!-- Custom Tooltip -->
-    <div id="custom-tooltip" class="custom-tooltip hidden"></div>
+        <!-- Custom Tooltip -->
+        <div id="custom-tooltip" class="custom-tooltip hidden"></div>
 
-    <script src="assets/js/peerjs.min.js"></script>
-    <script src="assets/js/qrcode.min.js"></script>
-    <script src="assets/js/html5-qrcode.min.js" type="text/javascript"></script>
-    <footer class="footer">
-        <div class="footer-content">
-            <div class="footer-brand">
-                <a href="index.html" style="text-decoration:none; color:var(--text-primary); font-weight:800; font-size:1.2rem;">Droper<span class="highlight">X</span></a>
-                <p style="color:var(--text-secondary); font-size:0.85rem; margin-top:8px;">Fast, secure, and limitless P2P file sharing.</p>
+                        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-col brand-col">
+                    <div class="brand-logo" style="margin-bottom: 4px;"><a href="index.html">Droper<span class="highlight">X</span></a></div>
+                    <p style="color:var(--text-secondary); font-size:0.85rem; margin-top:12px; line-height: 1.5;">Fast, secure, and limitless P2P file sharing.</p>
+                    <div style="margin-top: 16px; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #10b981;">
+                        <span class="material-symbols-rounded" style="font-size: 16px;">lock</span>
+                        <span>End-to-End Encrypted</span>
+                    </div>
+                </div>
+                <div class="footer-col">
+                    <h4>Quick Links</h4>
+                    <a href="index.html">Home</a>
+                    <a href="pages/about.html">About Us</a>
+                    <a href="pages/faq.html">FAQ & Help</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Legal</h4>
+                    <a href="pages/terms.html">Terms of Service</a>
+                    <a href="pages/privacy.html">Privacy Policy</a>
+                    <a href="pages/disclaimer.html">Disclaimer</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Connect</h4>
+                    <a href="https://github.com/Rehankumar554/DroperX" target="_blank" style="display: flex; align-items: center; gap: 8px;">
+                        <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" style="width: 16px; filter: invert(1);"> GitHub
+                    </a>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <a href="mailto:rksdevelopmentstudio@gmail.com" style="display: flex; align-items: center; gap: 8px;">
+                            <span class="material-symbols-rounded" style="font-size: 16px;">mail</span> Contact Us
+                        </a>
+                        <span style="font-size: 0.85rem; color: var(--text-secondary); margin-left: 24px; user-select: text;">rksdevelopmentstudio@gmail.com</span>
+                    </div>
+                </div>
             </div>
-            <div class="footer-links">
-                <a href="pages/about.html">About</a>
-                <a href="pages/legal.html">Legal</a>
-                <a href="pages/privacy.html">Privacy Policy</a>
-                <a href="pages/terms.html">Terms of Service</a>
+            <div class="footer-bottom">
+            <div style="margin-bottom: 6px;">&copy; 2026 DroperX. All rights reserved.</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap;">
+                Built with <span style="color: #ef4444; font-size: 1.1rem; line-height: 1; display: flex; align-items: center; padding-top: 2px;">&hearts;</span> by <strong>Rehan Kumar</strong> & <strong>RKS Development Studio</strong>
             </div>
         </div>
-        <div class="footer-bottom">
-            &copy; 2026 DroperX. All rights reserved.
-        </div>
-    </footer>
-    
-    <script src="assets/js/main.js"></script>
+        </footer>
+
+        <script src="assets/js/peerjs.min.js"></script>
+        <script src="assets/js/qrcode.min.js"></script>
+        <script src="assets/js/html5-qrcode.min.js" type="text/javascript"></script>
+        <script src="assets/js/main.js"></script>
 </body>
 
 </html>
