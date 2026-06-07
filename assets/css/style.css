@@ -50,6 +50,7 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -58,6 +59,17 @@ body {
     color: var(--text-primary);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+}
+
+/* Global iOS Soft Dim Tap Effect */
+a, button {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+a:active, button:active, .btn:active {
+    opacity: 0.6;
+    transition: opacity 0s;
+}
     display: flex;
     flex-direction: column;
     min-height: 100vh;
@@ -134,6 +146,37 @@ button {
     display: inline-block; 
     width: max-content; 
     white-space: nowrap;
+    
+    /* Mix of Sleek Shimmer & Apple Soft Glow */
+    position: relative;
+    overflow: hidden;
+    background: #ffffff;
+    color: #000000;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+    border: none;
+}
+
+#nav-get-started-btn::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%; width: 50%; height: 100%;
+    /* Subtle grey sweep so it's visible on the white background */
+    background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.2), transparent);
+    transform: skewX(-20deg);
+    animation: nav-shimmer 3s infinite;
+}
+
+#nav-get-started-btn:hover {
+    /* Apple-esque white soft glow */
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.15), 0 0 20px rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+    color: #000000;
+}
+
+@keyframes nav-shimmer {
+    100% { left: 200%; }
 }
 
 /* --- Bottom App Bar (Mobile) --- */
@@ -331,7 +374,7 @@ button {
     
     .nav-2-fab {
         background: var(--accent);
-        color: #000;
+        color: #ffffff;
         width: 44px;
         height: 44px;
         border-radius: 50%;
@@ -340,12 +383,12 @@ button {
         align-items: center;
         text-decoration: none;
         margin-left: auto;
-        box-shadow: 0 4px 15px rgba(74, 222, 128, 0.4);
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
     }
     
     /* Ensure content doesn't get hidden behind the bottom bar */
     .screen {
-        padding-bottom: 90px !important;
+        /* padding-bottom removed since footer handles the spacing for the bottom app bar */
     }
 
     .footer {
@@ -1306,6 +1349,113 @@ input[type="file"] {
 
 .portal-side:hover~.portal-line {
     box-shadow: 0 0 40px var(--accent), 0 0 80px #8b5cf6;
+}
+
+/* =========================================
+   NEARBY DEVICES (HAPTIC STACK CARDS)
+   ========================================= */
+.nearby-stack-container {
+    width: 100%;
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    z-index: 15;
+}
+
+.stack-card {
+    width: 100%;
+    max-width: 400px; /* Aligns well with the portal width */
+    height: 64px;
+    background: rgba(20,20,20,0.8);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    box-sizing: border-box;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    cursor: pointer;
+    transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    animation: drop-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+}
+
+.stack-card:nth-child(1) { animation-delay: 0.1s; }
+.stack-card:nth-child(2) { animation-delay: 0.2s; }
+.stack-card:nth-child(3) { animation-delay: 0.3s; }
+.stack-card:nth-child(4) { animation-delay: 0.4s; }
+
+.stack-card:hover {
+    transform: translateY(-5px) scale(1.02);
+    border-color: var(--accent);
+    box-shadow: 0 15px 30px rgba(0,0,0,0.5);
+}
+
+.stack-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: #222;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-right: 14px;
+}
+
+.stack-icon span {
+    font-size: 20px;
+    color: var(--accent);
+}
+
+.stack-info {
+    flex: 1;
+}
+
+.stack-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.stack-sub {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.stack-action {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 32px;
+    height: 32px;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+.stack-action span {
+    font-size: 20px;
+}
+
+.stack-card:hover .stack-action {
+    background: var(--accent);
+    color: #000;
+}
+
+@keyframes drop-in {
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 @media (max-width: 768px) {

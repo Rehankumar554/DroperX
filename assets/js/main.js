@@ -174,6 +174,38 @@ function showAlert(title, message, callback = null) {
     };
 }
 
+function showConfirm(title, message, onAccept, onDecline) {
+    const confirmModal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-modal-title');
+    const msgEl = document.getElementById('confirm-modal-message');
+    const acceptBtn = document.getElementById('confirm-modal-accept');
+    const declineBtn = document.getElementById('confirm-modal-decline');
+
+    if (!confirmModal) return;
+
+    titleEl.innerText = title;
+    msgEl.innerText = message;
+    
+    confirmModal.classList.remove('hidden');
+    setTimeout(() => confirmModal.classList.add('show'), 10);
+    
+    acceptBtn.onclick = () => {
+        confirmModal.classList.remove('show');
+        setTimeout(() => {
+            confirmModal.classList.add('hidden');
+            if (onAccept) onAccept();
+        }, 300);
+    };
+    
+    declineBtn.onclick = () => {
+        confirmModal.classList.remove('show');
+        setTimeout(() => {
+            confirmModal.classList.add('hidden');
+            if (onDecline) onDecline();
+        }, 300);
+    };
+}
+
 // === COPY ROOM ID ===
 displayRoomId.addEventListener('click', () => {
     if (roomId) {
@@ -353,82 +385,94 @@ if (cancelScanBtn) {
     });
 }
 
-// === INIT PEER ===
-function initPeer(id) {
-    // PeerJS uses its public cloud server by default
-    peer = new Peer(id);
+// === STANDBY PEER INIT ===
+async function initStandbyPeer() {
+    roomId = generateRoomId();
+    await deriveKey(roomId); // For our own room
+    
+    peer = new Peer(roomId);
     
     peer.on('open', (id) => {
         createRoomBtn.disabled = false;
         createRoomBtn.innerHTML = 'Create Room';
-        roomId = id;
-        displayRoomId.innerText = id;
         
-        // If we created a new room (no existing connection yet)
-        if (!dataConnection) {
-            document.getElementById('create-room-initial').classList.add('hidden');
-            const sendIcon = document.querySelector('#create-room-initial .material-symbols-rounded');
-            if (sendIcon) {
-                sendIcon.innerText = 'call_made';
-                sendIcon.style.animation = 'none';
-            }
-            document.getElementById('create-room-waiting').classList.remove('hidden'); setTimeout(() => document.getElementById('create-room-waiting').classList.add('show'), 10);
-            document.getElementById('home-display-room-id').innerText = id;
-            
-            const qrContainer = document.getElementById('qrcode-container');
-            qrContainer.innerHTML = "";
-            const joinUrl = window.location.href.split('?')[0] + "?room=" + id;
-            new QRCode(qrContainer, {
-                text: joinUrl,
-                width: 150,
-                height: 150,
-                colorDark : "#000000",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.L
-            });
-            if (connectionStatus) connectionStatus.innerText = "Waiting for a peer to join...";
-        } else {
-            showScreen(roomScreen);
+        // --- NEARBY DEVICES BROADCAST ---
+        window.currentRoomId = id;
+        if (typeof window.broadcastNearbyPresence === 'function') {
+            window.broadcastNearbyPresence(id, true);
         }
     });
 
     peer.on('connection', (conn) => {
-        // Someone joined our room
-        if (dataConnection) return; // Already connected
-        dataConnection = conn;
-        showScreen(roomScreen);
-        setupDataConnection();
+        // Someone joined our standby room!
+        if (dataConnection) {
+            conn.close();
+            return; 
+        }
+        
+        const isNearby = conn.metadata && conn.metadata.method === 'nearby';
+        
+        if (isNearby) {
+            // Ask for permission before accepting nearby connections
+            showConfirm("Incoming Connection", "A nearby device wants to connect to you.", () => {
+                // ACCEPTED
+                dataConnection = conn;
+                // Ensure we are using our own room's key since we are the host
+                deriveKey(roomId).then(() => {
+                    displayRoomId.innerText = roomId;
+                    showScreen(roomScreen);
+                    setupDataConnection();
+                    
+                    // Notify the sender that we accepted
+                    dataConnection.send({ command: 'CONNECTION_ACCEPTED' });
+                    
+                    // Stop broadcasting
+                    if (typeof window.broadcastNearbyPresence === 'function') {
+                        window.broadcastNearbyPresence(window.currentRoomId, false);
+                    }
+                });
+            }, () => {
+                // DECLINED
+                conn.close();
+            });
+        } else {
+            // Auto-accept passcode/QR code connections (consent is implied by having the code)
+            dataConnection = conn;
+            deriveKey(roomId).then(() => {
+                displayRoomId.innerText = roomId;
+                showScreen(roomScreen);
+                setupDataConnection();
+                
+                // Stop broadcasting
+                if (typeof window.broadcastNearbyPresence === 'function') {
+                    window.broadcastNearbyPresence(window.currentRoomId, false);
+                }
+            });
+        }
     });
     
     peer.on('error', (err) => {
-        if (createRoomBtn) {
-            createRoomBtn.disabled = false;
-            createRoomBtn.innerHTML = 'Create Room';
-        }
-        if (joinRoomBtn) {
-            joinRoomBtn.disabled = false;
-            joinRoomBtn.innerHTML = 'Join Room';
-        }
-        console.error(err);
-        if (err.type === 'unavailable-id') {
-            showAlert('Error', 'Room ID is already taken. Try joining it.');
-        } else {
-            showToast('PeerJS Error: ' + err.message, 'error');
-        }
+        console.error("Standby Peer Error:", err);
     });
 
     peer.on('disconnected', () => {
         if (isExiting) return;
-        isExiting = true;
-        showAlert("Disconnected", "Connection lost. Exiting room...", () => {
-            if (peer) peer.destroy();
-            window.location.href = window.location.href.split('?')[0];
-        });
+        if (!dataConnection && peer) {
+            peer.reconnect(); // Silently reconnect if we are still just waiting
+        } else {
+            isExiting = true;
+            showAlert("Disconnected", "Connection lost. Exiting room...", () => {
+                if (peer) peer.destroy();
+                window.location.href = window.location.href.split('?')[0];
+            });
+        }
     });
 }
 
 // === JOIN OR CREATE ===
 window.addEventListener('load', async () => {
+    // Start standby automatically
+    initStandbyPeer();
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
     const actionParam = urlParams.get('action');
@@ -498,18 +542,88 @@ window.addEventListener('load', async () => {
 
 if (createRoomBtn) {
     createRoomBtn.addEventListener('click', async () => {
-        const sendIcon = document.querySelector('#create-room-initial .material-symbols-rounded');
-        if (sendIcon) {
-            sendIcon.innerText = 'progress_activity';
-            sendIcon.style.animation = 'spin 1s linear infinite';
+        if (!roomId || !peer || peer.disconnected) {
+            showToast("Initializing connection... please try again in a moment", "info");
+            return;
         }
-        createRoomBtn.disabled = true;
-        createRoomBtn.innerHTML = '<span class="spinner"></span> Creating...';
-        const newRoomId = generateRoomId();
-        await deriveKey(newRoomId);
-        initPeer(newRoomId);
+        
+        // Just show the modal for the existing standby room
+        document.getElementById('create-room-initial').classList.add('hidden');
+        document.getElementById('create-room-waiting').classList.remove('hidden'); 
+        setTimeout(() => document.getElementById('create-room-waiting').classList.add('show'), 10);
+        
+        document.getElementById('home-display-room-id').innerText = roomId;
+        displayRoomId.innerText = roomId;
+        
+        const qrContainer = document.getElementById('qrcode-container');
+        qrContainer.innerHTML = "";
+        const joinUrl = window.location.href.split('?')[0] + "?room=" + roomId;
+        new QRCode(qrContainer, {
+            text: joinUrl,
+            width: 150,
+            height: 150,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.L
+        });
+        if (connectionStatus) connectionStatus.innerText = "Waiting for a peer to join...";
     });
 }
+
+// --- NEARBY DEVICES INTEGRATION ---
+window.joinNearbyRoom = async function(targetRoomId) {
+    if (!targetRoomId || !peer) return;
+    targetRoomId = targetRoomId.toUpperCase();
+    
+    // We are SENDER, so derive SENDER key (target room id)
+    await deriveKey(targetRoomId);
+    
+    displayRoomId.innerText = targetRoomId;
+    
+    // Pass metadata so the receiver knows this is a nearby connection and requires a prompt
+    dataConnection = peer.connect(targetRoomId, { metadata: { method: 'nearby' } });
+    
+    let hasAccepted = false;
+    
+    // Fallback timeout in case receiver doesn't answer or declines
+    const connTimeout = setTimeout(() => {
+        if (!hasAccepted && dataConnection) {
+            showToast("Connection declined or timed out", "error");
+            dataConnection.close();
+            dataConnection = null;
+        }
+    }, 15000); // 15 seconds to accept
+    
+    dataConnection.on('open', () => {
+        showToast("Waiting for receiver to accept...", "info");
+        
+        const acceptListener = (data) => {
+            if (data && data.command === 'CONNECTION_ACCEPTED') {
+                hasAccepted = true;
+                clearTimeout(connTimeout);
+                // PeerJS workaround to remove listener: just set it to null or ignore it.
+                // It's safer to just let setupDataConnection overwrite or handle it.
+                // We'll just call setupDataConnection which adds its own listeners.
+                showScreen(roomScreen);
+                setupDataConnection();
+                
+                // Stop broadcasting our presence since we're busy
+                if (typeof window.broadcastNearbyPresence === 'function') {
+                    window.broadcastNearbyPresence(window.currentRoomId, false);
+                }
+            }
+        };
+        
+        dataConnection.on('data', acceptListener);
+    });
+    
+    dataConnection.on('close', () => {
+        if (!hasAccepted) {
+            showToast("Connection declined", "error");
+            dataConnection = null;
+        }
+    });
+};
 
 if (joinRoomBtn) {
     joinRoomBtn.addEventListener('click', async () => {
@@ -584,7 +698,7 @@ let receivedSize = 0;
 let fileMeta = null;
 
 function setupDataConnection() {
-    dataConnection.on('open', () => {
+    const onConnectionOpen = () => {
         showScreen(roomScreen);
         connectionStatus.innerText = "Connected! Ready to transfer.";
         document.getElementById('header-status-dot').classList.add('status-connected');
@@ -606,7 +720,13 @@ function setupDataConnection() {
             qrModal.classList.remove('show');
             setTimeout(() => qrModal.classList.add('hidden'), 300);
         }
-    });
+    };
+
+    if (dataConnection.open) {
+        onConnectionOpen();
+    } else {
+        dataConnection.on('open', onConnectionOpen);
+    }
 
     dataConnection.on('data', async (data) => {
         let parsed = null;
@@ -822,6 +942,10 @@ function setupDataConnection() {
         clearAllFiles();
         showAlert("Peer Left", "The other peer has left the room. Exiting...", () => {
             if (dataConnection) dataConnection.close();
+            // --- NEARBY DEVICES CLOSE BROADCAST ---
+            if (typeof window.broadcastNearbyPresence === 'function' && window.currentRoomId) {
+                window.broadcastNearbyPresence(window.currentRoomId, false);
+            }
             if (peer) peer.destroy();
             window.location.href = window.location.href.split('?')[0];
         });
@@ -831,6 +955,10 @@ function setupDataConnection() {
         clearAllFiles();
         console.error(err);
         showAlert("Connection Error", err.message, () => {
+            // --- NEARBY DEVICES CLOSE BROADCAST ---
+            if (typeof window.broadcastNearbyPresence === 'function' && window.currentRoomId) {
+                window.broadcastNearbyPresence(window.currentRoomId, false);
+            }
             if (peer) peer.destroy();
             window.location.href = window.location.href.split('?')[0];
         });
