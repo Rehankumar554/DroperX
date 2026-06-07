@@ -64,8 +64,8 @@ async function encryptChunk(chunkBuffer) {
 async function decryptChunk(encryptedPayload) {
     if (!sharedCryptoKey) return encryptedPayload;
     const payloadBytes = new Uint8Array(encryptedPayload);
-    const iv = payloadBytes.slice(0, 12);
-    const encryptedData = payloadBytes.slice(12);
+    const iv = payloadBytes.subarray(0, 12);
+    const encryptedData = payloadBytes.subarray(12);
     try {
         return await window.crypto.subtle.decrypt(
             { name: "AES-GCM", iv: iv },
@@ -112,11 +112,29 @@ if (sendTextBtn) {
 if (copyTextBtn) {
     copyTextBtn.addEventListener('click', () => {
         if (receivedTextContent && receivedTextContent.innerText) {
-            navigator.clipboard.writeText(receivedTextContent.innerText).then(() => {
-                showToast('Text copied to clipboard!', 'success');
-            }).catch(err => {
-                showToast('Failed to copy text', 'error');
-            });
+            const textToCopy = receivedTextContent.innerText;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    showToast('Text copied to clipboard!', 'success');
+                }).catch(err => {
+                    showToast('Failed to copy text', 'error');
+                });
+            } else {
+                let textArea = document.createElement("textarea");
+                textArea.value = textToCopy;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-999999px";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('Text copied to clipboard!', 'success');
+                } catch (err) {
+                    showToast('Failed to copy text', 'error');
+                }
+                textArea.remove();
+            }
         }
     });
 }
@@ -128,6 +146,9 @@ const sendProgressText = document.getElementById('send-progress-text');
 const sendStatus = document.getElementById('send-status');
 const cancelTransferBtn = document.getElementById('cancel-transfer-btn');
 const pauseTransferBtn = document.getElementById('pause-transfer-btn');
+const receiverPauseBtn = document.getElementById('receiver-pause-btn');
+const receiverCancelBtn = document.getElementById('receiver-cancel-btn');
+const receiverSkipBtn = document.getElementById('receiver-skip-btn');
 
 const receiveProgressContainer = document.getElementById('receive-progress-container');
 const receiveProgressFill = document.getElementById('receive-progress-fill');
@@ -178,61 +199,148 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
-function showAlert(title, message, callback = null) {
-    alertModalTitle.innerText = title;
-    alertModalMessage.innerText = message;
-    alertModal.classList.remove('hidden');
-    setTimeout(() => alertModal.classList.add('show'), 10);
+/**
+ * Global Modal System
+ * @param {Object} options Configuration for the modal
+ * @param {string} options.title - The title text
+ * @param {string} options.message - The main message or subtitle
+ * @param {string} [options.icon] - Optional material icon name
+ * @param {Object} [options.checkbox] - Optional checkbox { id, label, checked }
+ * @param {Array} options.buttons - Array of button objects { text, role, onClick } (role: 'default'|'danger'|'bold')
+ */
+function showGlobalModal(options) {
+    const overlay = document.getElementById('global-modal-overlay');
+    const titleEl = document.getElementById('global-modal-title');
+    const messageEl = document.getElementById('global-modal-message');
+    const iconContainer = document.getElementById('global-modal-icon-container');
+    const iconEl = document.getElementById('global-modal-icon');
+    const checkboxContainer = document.getElementById('global-modal-checkbox-container');
+    const checkboxInput = document.getElementById('global-modal-checkbox');
+    const checkboxLabel = document.getElementById('global-modal-checkbox-label');
+    const buttonsContainer = document.getElementById('global-modal-buttons');
+
+    if (!overlay) return;
+
+    // Reset State
+    titleEl.innerText = options.title || '';
+    messageEl.innerHTML = options.message || ''; // allow basic html like <br>
     
-    alertModalBtn.onclick = () => {
-        alertModal.classList.remove('show');
+    if (options.icon) {
+        iconEl.innerText = options.icon;
+        iconContainer.classList.remove('hidden');
+    } else {
+        iconContainer.classList.add('hidden');
+    }
+
+    if (options.checkbox) {
+        checkboxInput.checked = !!options.checkbox.checked;
+        checkboxLabel.innerText = options.checkbox.label || '';
+        checkboxContainer.classList.remove('hidden');
+    } else {
+        checkboxContainer.classList.add('hidden');
+    }
+
+    buttonsContainer.innerHTML = ''; // Clear old buttons
+
+    const closeAndCleanup = () => {
+        overlay.classList.remove('show');
         setTimeout(() => {
-            alertModal.classList.add('hidden');
-            if (callback) callback();
+            overlay.classList.add('hidden');
         }, 300);
     };
+
+    if (options.buttons && options.buttons.length > 0) {
+        options.buttons.forEach((btnConfig, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'ios17-row-btn modal-ios17-alert-btn';
+            
+            // Layout styling
+            btn.style.flex = "1";
+            
+            // Add border between buttons if multiple
+            if (options.buttons.length > 1 && index < options.buttons.length - 1) {
+                btn.style.borderRight = "1px solid rgba(255, 255, 255, 0.1)";
+            }
+
+            // Role styling
+            if (btnConfig.role === 'danger') {
+                btn.style.color = "#FF453A"; // Exact iOS 17 Red
+            } else {
+                btn.style.color = "#0A84FF"; // Exact iOS 17 Blue
+            }
+
+            if (btnConfig.role === 'bold') {
+                btn.style.fontWeight = "600";
+            } else {
+                btn.style.fontWeight = "500";
+            }
+            
+            btn.innerText = btnConfig.text;
+            btn.onclick = () => {
+                const cbState = checkboxInput.checked;
+                closeAndCleanup();
+                if (btnConfig.onClick) {
+                    btnConfig.onClick({ checkboxChecked: cbState });
+                }
+            };
+            buttonsContainer.appendChild(btn);
+        });
+    } else {
+        // Fallback default button
+        const btn = document.createElement('button');
+        btn.className = 'ios17-row-btn modal-ios17-alert-btn';
+        btn.style.color = "#0A84FF";
+        btn.style.fontWeight = "600";
+        btn.style.flex = "1";
+        btn.innerText = 'OK';
+        btn.onclick = closeAndCleanup;
+        buttonsContainer.appendChild(btn);
+    }
+
+    overlay.classList.remove('hidden');
+    setTimeout(() => overlay.classList.add('show'), 10);
+}
+
+function showAlert(title, message, callback = null) {
+    showGlobalModal({
+        title: title,
+        message: message,
+        buttons: [
+            { text: 'OK', role: 'bold', onClick: callback }
+        ]
+    });
 }
 
 let pendingDeclineCallback = null;
 
 function showConfirm(title, message, onAccept, onDecline) {
-    const confirmModal = document.getElementById('confirm-modal');
-    const titleEl = document.getElementById('confirm-modal-title');
-    const msgEl = document.getElementById('confirm-modal-message');
-    const acceptBtn = document.getElementById('confirm-modal-accept');
-    const declineBtn = document.getElementById('confirm-modal-decline');
-
-    if (!confirmModal) return;
-
     if (pendingDeclineCallback) {
-        // If a new confirm overwrites an old one, explicitly decline the old one!
         pendingDeclineCallback();
     }
     pendingDeclineCallback = onDecline;
 
-    titleEl.innerText = title;
-    msgEl.innerText = message;
-    
-    confirmModal.classList.remove('hidden');
-    setTimeout(() => confirmModal.classList.add('show'), 10);
-    
-    acceptBtn.onclick = () => {
-        pendingDeclineCallback = null;
-        confirmModal.classList.remove('show');
-        setTimeout(() => {
-            confirmModal.classList.add('hidden');
-            if (onAccept) onAccept();
-        }, 300);
-    };
-    
-    declineBtn.onclick = () => {
-        pendingDeclineCallback = null;
-        confirmModal.classList.remove('show');
-        setTimeout(() => {
-            confirmModal.classList.add('hidden');
-            if (onDecline) onDecline();
-        }, 300);
-    };
+    showGlobalModal({
+        title: title,
+        message: message,
+        buttons: [
+            { 
+                text: 'Decline', 
+                role: 'danger', 
+                onClick: () => {
+                    pendingDeclineCallback = null;
+                    if (onDecline) onDecline();
+                } 
+            },
+            { 
+                text: 'Accept', 
+                role: 'bold', 
+                onClick: () => {
+                    pendingDeclineCallback = null;
+                    if (onAccept) onAccept();
+                } 
+            }
+        ]
+    });
 }
 
 // === COPY ROOM ID ===
@@ -331,8 +439,8 @@ let selectedFiles = [];
 let currentFileIndex = 0;
 let html5QrcodeScanner = null;
 
-// Chunk size for file transfer (16KB is safe for WebRTC)
-const CHUNK_SIZE = 16384; 
+// Chunk size for file transfer (64KB for optimal speed)
+const CHUNK_SIZE = 65536;  
 
 // Generate a random room ID
 function generateRoomId() {
@@ -831,7 +939,7 @@ function setupDataConnection() {
                 const txtContent = document.getElementById('received-text-content');
                 if (txtContainer && txtContent) {
                     txtContainer.classList.remove('hidden');
-                    appendMessage(parsed.text, 'remote');
+                    txtContent.innerText = parsed.text;
                 }
                 return;
             }
@@ -841,8 +949,11 @@ function setupDataConnection() {
                 
                 // If we were receiving
                 if (fileMeta) {
-                    receiveStatus.innerText = "Transfer Cancelled by Sender!";
+                    receiveStatus.innerText = "Transfer Cancelled!";
                     receiveProgressContainer.classList.add('state-error');
+                    if (receiverPauseBtn) receiverPauseBtn.classList.add('hidden');
+                    if (receiverCancelBtn) receiverCancelBtn.classList.add('hidden');
+                    if (receiverSkipBtn) receiverSkipBtn.classList.add('hidden');
                     receiveBuffer = [];
                     if (fileStream) {
                         try { fileStream.abort(); } catch(e){}
@@ -874,15 +985,74 @@ function setupDataConnection() {
                 return;
             }
 
+            if (parsed.command === 'SKIP_CURRENT_FILE') {
+                if (isTransferring) {
+                    // Sender is notified that Receiver skipped
+                    isCurrentFileSkipped = true;
+                    sendStatus.innerText = "File Skipped by Receiver!";
+                    sendProgressContainer.classList.add('state-error');
+                } else {
+                    // Receiver is notified that Sender skipped
+                    receiveStatus.innerText = "File Skipped by Sender!";
+                    receiveProgressContainer.classList.add('state-error');
+                    receiveBuffer = [];
+                    if (fileStream) {
+                        try { fileStream.abort(); } catch(e){}
+                        fileStream = null;
+                    }
+                    fileMeta = null; // Drop subsequent chunks for this file
+                }
+                return;
+            }
+
             if (parsed.command === 'PAUSE_TRANSFER') {
                 receiveStatus.innerText = "Transfer Paused by Sender";
                 receiveProgressContainer.classList.add('state-error');
+                isReceiverPaused = true;
+                if (typeof receiverPauseBtn !== 'undefined' && receiverPauseBtn) {
+                    receiverPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span> Resume';
+                }
                 return;
             }
 
             if (parsed.command === 'RESUME_TRANSFER') {
                 receiveStatus.innerText = `Receiving: ${sanitizeHTML(fileMeta.name)} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
                 receiveProgressContainer.classList.remove('state-error');
+                isReceiverPaused = false;
+                if (typeof receiverPauseBtn !== 'undefined' && receiverPauseBtn) {
+                    receiverPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span> Pause';
+                }
+                return;
+            }
+
+            if (parsed.command === 'RECEIVER_PAUSE') {
+                isPaused = true;
+                sendStatus.innerText = "Paused by Receiver";
+                sendProgressContainer.classList.add('state-error');
+                if (pauseTransferBtn) {
+                    pauseTransferBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span> Resume';
+                }
+                return;
+            }
+
+            if (parsed.command === 'RECEIVER_RESUME') {
+                isPaused = false;
+                sendStatus.innerText = "Transfer Resumed...";
+                sendProgressContainer.classList.remove('state-error');
+                if (pauseTransferBtn) {
+                    pauseTransferBtn.innerHTML = '<span class="material-symbols-rounded">pause</span> Pause';
+                }
+                
+                // Revert to Sending after 2s
+                setTimeout(() => {
+                    if (!isPaused && !isTransferCancelled && isTransferring && selectedFiles && selectedFiles.length > 0) {
+                        const currentFile = selectedFiles[currentFileIndex];
+                        if (currentFile) {
+                            sendStatus.innerText = `Sending: ${sanitizeHTML(currentFile.name)} (${currentFileIndex + 1}/${selectedFiles.length})`;
+                        }
+                    }
+                }, 2000);
+                
                 return;
             }
 
@@ -902,6 +1072,14 @@ function setupDataConnection() {
                 receiveBuffer = [];
                 receivedSize = 0;
                 isTransferCancelled = false;
+                isReceiverPaused = false;
+                
+                if (receiverPauseBtn) {
+                    receiverPauseBtn.classList.remove('hidden');
+                    receiverPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span> Pause';
+                }
+                if (receiverCancelBtn) receiverCancelBtn.classList.remove('hidden');
+                if (receiverSkipBtn) receiverSkipBtn.classList.remove('hidden');
                 
                 receiveStartTime = 0; lastReceiveTime = 0; lastReceiveBytes = 0;
                 if(receiveChart) { receiveChart.data.labels=[]; receiveChart.data.datasets[0].data=[]; receiveChart.update('none'); }
@@ -1065,6 +1243,9 @@ function finalizeReceive() {
     if (fileMeta.fileIndex + 1 === fileMeta.totalFiles) {
         receiveStatus.innerText = "All Files Received!";
         receiveProgressContainer.classList.add('state-success');
+        if (receiverPauseBtn) receiverPauseBtn.classList.add('hidden');
+        if (receiverCancelBtn) receiverCancelBtn.classList.add('hidden');
+        if (receiverSkipBtn) receiverSkipBtn.classList.add('hidden');
     }
 }
 
@@ -1105,6 +1286,7 @@ function clearAllFiles() {
 // === FILE TRANSFER LOGIC ===
 let isTransferring = false;
 let isTransferCancelled = false;
+let isCurrentFileSkipped = false;
 let isPaused = false;
 let isWaitingForAccept = false;
 let fileStream = null;
@@ -1125,72 +1307,321 @@ pauseTransferBtn.addEventListener('click', () => {
         if (dataConnection && dataConnection.open) {
             dataConnection.send(JSON.stringify({ command: 'RESUME_TRANSFER' }));
         }
+        
+        // Revert to Sending after 2s
+        setTimeout(() => {
+            if (!isPaused && !isTransferCancelled && isTransferring && selectedFiles && selectedFiles.length > 0) {
+                const currentFile = selectedFiles[currentFileIndex];
+                if (currentFile) {
+                    sendStatus.innerText = `Sending: ${sanitizeHTML(currentFile.name)} (${currentFileIndex + 1}/${selectedFiles.length})`;
+                }
+            }
+        }, 2000);
     }
 });
 
-cancelTransferBtn.addEventListener('click', () => {
-    isTransferCancelled = true;
-    isWaitingForAccept = false;
-    isPaused = false;
-    cancelTransferBtn.classList.add('hidden');
-    pauseTransferBtn.classList.add('hidden');
-    
-    if (dataConnection && dataConnection.open) {
-        dataConnection.send(JSON.stringify({ command: 'CANCEL_TRANSFER' }));
+function showCancelWarningModal(onConfirm) {
+    if (localStorage.getItem('hideCancelWarning') === 'true') {
+        onConfirm();
+        return;
     }
     
-    sendStatus.innerText = "Transfer Cancelled!";
-    sendProgressContainer.classList.add('state-error');
-    
-    setTimeout(() => {
-        sendProgressContainer.classList.add('hidden');
-        sendProgressContainer.classList.remove('state-error');
-        sendFileBtn.disabled = true;
-        document.getElementById('file-selection-form').reset();
-        fileDetails.innerText = '';
-        selectedFiles = [];
-        window.isZippingFolder = false;
-        isTransferring = false;
-    }, 3000);
+    showGlobalModal({
+        title: "Cancel Batch Transfer?",
+        message: "This will cancel the ENTIRE batch transfer.<br><br>If you only want to cancel the current file, please use the <strong>Skip</strong> button.",
+        checkbox: {
+            id: 'cancel-modal-dont-show',
+            label: "Don't show this again",
+            checked: false
+        },
+        buttons: [
+            {
+                text: "Keep Transferring",
+                role: "bold",
+                onClick: () => {}
+            },
+            {
+                text: "Cancel Batch",
+                role: "danger",
+                onClick: (result) => {
+                    if (result.checkboxChecked) {
+                        localStorage.setItem('hideCancelWarning', 'true');
+                    }
+                    onConfirm();
+                }
+            }
+        ]
+    });
+}
+
+cancelTransferBtn.addEventListener('click', () => {
+    const doCancel = () => {
+        isTransferCancelled = true;
+        isWaitingForAccept = false;
+        isPaused = false;
+        cancelTransferBtn.classList.add('hidden');
+        pauseTransferBtn.classList.add('hidden');
+        
+        if (dataConnection && dataConnection.open) {
+            dataConnection.send(JSON.stringify({ command: 'CANCEL_TRANSFER' }));
+        }
+        
+        sendStatus.innerText = "Transfer Cancelled!";
+        sendProgressContainer.classList.add('state-error');
+        
+        setTimeout(() => {
+            sendProgressContainer.classList.add('hidden');
+            sendProgressContainer.classList.remove('state-error');
+            sendFileBtn.disabled = true;
+            document.getElementById('file-selection-form').reset();
+            fileDetails.innerText = '';
+            selectedFiles = [];
+            window.isZippingFolder = false;
+            isTransferring = false;
+        }, 3000);
+    };
+
+    if (selectedFiles && selectedFiles.length > 1) {
+        showCancelWarningModal(doCancel);
+    } else {
+        doCancel();
+    }
 });
+
+let isReceiverPaused = false;
+
+if (receiverPauseBtn) {
+    receiverPauseBtn.addEventListener('click', () => {
+        isReceiverPaused = !isReceiverPaused;
+        if (isReceiverPaused) {
+            receiverPauseBtn.innerHTML = '<span class="material-symbols-rounded">play_arrow</span> Resume';
+            receiveStatus.innerText = "Transfer Paused by You";
+            receiveProgressContainer.classList.add('state-error');
+            if (dataConnection && dataConnection.open) {
+                dataConnection.send(JSON.stringify({ command: 'RECEIVER_PAUSE' }));
+            }
+        } else {
+            receiverPauseBtn.innerHTML = '<span class="material-symbols-rounded">pause</span> Pause';
+            if (fileMeta) {
+                receiveStatus.innerText = `Receiving: ${sanitizeHTML(fileMeta.name)} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
+            } else {
+                receiveStatus.innerText = "Transfer Resumed...";
+            }
+            receiveProgressContainer.classList.remove('state-error');
+            if (dataConnection && dataConnection.open) {
+                dataConnection.send(JSON.stringify({ command: 'RECEIVER_RESUME' }));
+            }
+        }
+    });
+}
+
+if (receiverCancelBtn) {
+    const doReceiverCancel = () => {
+        isTransferCancelled = true;
+        isWaitingForAccept = false;
+        isReceiverPaused = false;
+        receiverCancelBtn.classList.add('hidden');
+        if (receiverPauseBtn) receiverPauseBtn.classList.add('hidden');
+        if (receiverSkipBtn) receiverSkipBtn.classList.add('hidden');
+        
+        if (dataConnection && dataConnection.open) {
+            dataConnection.send(JSON.stringify({ command: 'CANCEL_TRANSFER' }));
+        }
+        
+        receiveStatus.innerText = "Transfer Cancelled!";
+        receiveProgressContainer.classList.add('state-error');
+        receiveBuffer = [];
+        if (fileStream) {
+            try { fileStream.abort(); } catch(e){}
+            fileStream = null;
+        }
+        
+        setTimeout(() => {
+            receiveProgressContainer.classList.add('hidden');
+            receiveProgressContainer.classList.remove('state-error');
+            isTransferring = false;
+        }, 3000);
+    };
+
+    receiverCancelBtn.addEventListener('click', () => {
+        // Let's assume if fileMeta has totalFiles > 1, it's a batch
+        if (fileMeta && fileMeta.totalFiles > 1) {
+            showCancelWarningModal(doReceiverCancel);
+        } else {
+            doReceiverCancel();
+        }
+    });
+}
+
+if (receiverSkipBtn) {
+    receiverSkipBtn.addEventListener('click', () => {
+        // If it's the last file in the queue, treat skip as cancel (bypass warning)
+        if (fileMeta && fileMeta.fileIndex + 1 === fileMeta.totalFiles) {
+            if (typeof doReceiverCancel !== 'undefined') {
+                // To avoid scope issues with doReceiverCancel, just click the cancel button
+                // but wait, clicking cancel triggers the modal!
+            }
+            // Let's implement inline or use a custom event.
+            // Better: just run the logic directly.
+            isTransferCancelled = true;
+            isWaitingForAccept = false;
+            isReceiverPaused = false;
+            receiverCancelBtn.classList.add('hidden');
+            if (receiverPauseBtn) receiverPauseBtn.classList.add('hidden');
+            receiverSkipBtn.classList.add('hidden');
+            
+            if (dataConnection && dataConnection.open) {
+                dataConnection.send(JSON.stringify({ command: 'CANCEL_TRANSFER' }));
+            }
+            
+            receiveStatus.innerText = "Transfer Cancelled!";
+            receiveProgressContainer.classList.add('state-error');
+            receiveBuffer = [];
+            if (fileStream) {
+                try { fileStream.abort(); } catch(e){}
+                fileStream = null;
+            }
+            
+            setTimeout(() => {
+                receiveProgressContainer.classList.add('hidden');
+                receiveProgressContainer.classList.remove('state-error');
+                isTransferring = false;
+            }, 3000);
+            return;
+        }
+
+        isCurrentFileSkipped = true;
+        if (dataConnection && dataConnection.open) {
+            dataConnection.send(JSON.stringify({ command: 'SKIP_CURRENT_FILE' }));
+        }
+        receiveStatus.innerText = "Skipping file...";
+        receiveProgressContainer.classList.add('state-error');
+        receiveBuffer = [];
+        if (fileStream) {
+            try { fileStream.abort(); } catch(e){}
+            fileStream = null;
+        }
+    });
+}
+
+function getFileIcon(type, name) {
+    if (type.startsWith('image/')) return 'image';
+    if (type.startsWith('video/')) return 'video_file';
+    if (type.startsWith('audio/')) return 'audio_file';
+    if (name.endsWith('.pdf')) return 'picture_as_pdf';
+    if (name.endsWith('.zip') || name.endsWith('.rar')) return 'folder_zip';
+    if (name.endsWith('.apk')) return 'apk_install';
+    return 'description';
+}
+
+window.removeSelectedFile = function(index) {
+    if (isTransferring) {
+        showToast("Cannot remove files during an active transfer.", "error");
+        return;
+    }
+    selectedFiles.splice(index, 1);
+    if (selectedFiles.length === 0) {
+        fileDetails.innerHTML = "";
+        sendFileBtn.disabled = true;
+        window.isZippingFolder = false;
+        window.folderTransferMeta = null;
+    } else {
+        renderFileDetailsUI();
+    }
+};
+
+function renderFileDetailsUI() {
+    if (!selectedFiles || selectedFiles.length === 0) {
+        fileDetails.innerHTML = "";
+        sendFileBtn.disabled = true;
+        return;
+    }
+
+    let html = '<div class="ios-list">';
+    const maxRender = 50;
+    const renderCount = Math.min(selectedFiles.length, maxRender);
+
+    for (let i = 0; i < renderCount; i++) {
+        const f = selectedFiles[i];
+        const icon = getFileIcon(f.type, f.name);
+        const sizeStr = (f.size / 1024 / 1024).toFixed(2) + ' MB';
+        
+        html += `
+            <div class="ios-file-item">
+                <div class="ios-file-icon"><span class="material-symbols-rounded">${icon}</span></div>
+                <div class="ios-file-info">
+                    <span class="ios-file-name" title="${sanitizeHTML(f.name)}">${sanitizeHTML(f.name)}</span>
+                    <span class="ios-file-meta">${sizeStr}</span>
+                </div>
+                <button class="ios-remove-btn" onclick="removeSelectedFile(${i})"><span class="material-symbols-rounded">close</span></button>
+            </div>
+        `;
+    }
+
+    if (selectedFiles.length > maxRender) {
+        html += `
+            <div class="ios-file-item" style="justify-content: center; background: rgba(10,132,255,0.05); color: var(--accent); cursor: default;">
+                <span style="font-size: 0.9rem; font-weight: 500;">+ ${selectedFiles.length - maxRender} more files...</span>
+            </div>
+        `;
+    }
+
+    html += '</div>';
+
+    // If it's a folder transfer, show summary at top
+    if (window.isZippingFolder) {
+        const folderName = window.folderTransferMeta ? window.folderTransferMeta.name : 'Folder';
+        const totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+        html = `<div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 0.85rem;">
+                    Packaging as <strong>${sanitizeHTML(folderName)}</strong> (${(totalSize / 1024 / 1024).toFixed(2)} MB)
+                </div>` + html;
+    } else {
+        const totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+        html = `<div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 0.85rem;">
+                    <strong>${selectedFiles.length} file(s) selected</strong> (${(totalSize / 1024 / 1024).toFixed(2)} MB total)
+                </div>` + html;
+    }
+
+    fileDetails.innerHTML = html;
+    sendFileBtn.disabled = false;
+}
 
 function handleFolderSelection(filesArray) {
     if (isTransferring) {
+        showToast("Cannot select new files while a transfer is in progress.", "error");
         console.warn("Cannot select new files while a transfer is in progress.");
         return;
     }
     if (filesArray.length > 0) {
         window.isZippingFolder = true;
-        selectedFiles = Array.from(filesArray);
-        const firstPath = selectedFiles[0].webkitRelativePath || "";
-        const folderName = firstPath.split('/')[0] || "Shared_Folder";
-        const totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
         
-        fileDetails.innerText = `Selected Folder: ${folderName} (${selectedFiles.length} files, ~${(totalSize / 1024 / 1024).toFixed(2)} MB)`;
-        window.folderTransferMeta = { name: `${folderName}.zip`, totalSize };
-        sendFileBtn.disabled = false;
-    } else {
-        selectedFiles = [];
-        fileDetails.innerText = "No files selected";
-        sendFileBtn.disabled = true;
+        // Append new files instead of overwriting
+        selectedFiles = [...selectedFiles, ...Array.from(filesArray)];
+        
+        // Preserve original folder name if one already exists, else create it
+        if (!window.folderTransferMeta) {
+            const firstPath = Array.from(filesArray)[0].webkitRelativePath || "";
+            const folderName = firstPath.split('/')[0] || "Shared_Folder";
+            window.folderTransferMeta = { name: `${folderName}.zip`, totalSize: 0 };
+        }
+        
+        // Recalculate total size
+        window.folderTransferMeta.totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+        
+        renderFileDetailsUI();
     }
 }
 
 function handleFileSelection(filesArray) {
     if (isTransferring) {
+        showToast("Cannot select new files while a transfer is in progress.", "error");
         console.warn("Cannot select new files while a transfer is in progress.");
         return;
     }
     if (filesArray.length > 0) {
-        window.isZippingFolder = false;
-        selectedFiles = Array.from(filesArray);
-        const totalSize = selectedFiles.reduce((acc, file) => acc + file.size, 0);
-        fileDetails.innerText = `Selected: ${selectedFiles.length} file(s) (${(totalSize / 1024 / 1024).toFixed(2)} MB)`;
-        sendFileBtn.disabled = false;
-    } else {
-        selectedFiles = [];
-        fileDetails.innerText = "No files selected";
-        sendFileBtn.disabled = true;
+        // Append new files instead of overwriting
+        selectedFiles = [...selectedFiles, ...Array.from(filesArray)];
+        renderFileDetailsUI();
     }
 }
 
@@ -1201,6 +1632,7 @@ fileInput.addEventListener('change', (e) => {
 function interceptFileSelection(e) {
     if (isTransferring) {
         e.preventDefault();
+        showToast("Cannot select new files while a transfer is in progress.", "error");
         console.warn('Cannot select new files while a transfer is in progress.');
     }
 }
@@ -1356,13 +1788,19 @@ function sendNextFile() {
 
     const checkPauseAndRead = () => {
         if (isTransferCancelled) return;
+        if (isCurrentFileSkipped) {
+            isCurrentFileSkipped = false;
+            currentFileIndex++;
+            setTimeout(sendNextFile, 100);
+            return;
+        }
         if (isPaused || isWaitingForAccept) {
             setTimeout(checkPauseAndRead, 100);
             return;
         }
         
-        // Prevent WebRTC silent buffer overflow (keeps buffer under 1MB)
-        if (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
+        // Prevent WebRTC silent buffer overflow (keeps buffer under 8MB for high speed)
+        if (dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 8 * 1024 * 1024) {
             setTimeout(checkPauseAndRead, 50);
             return;
         }
@@ -1424,7 +1862,12 @@ function updateSendProgress(current, total) {
             if(etaSpan) etaSpan.innerText = formatETA(etaSeconds);
             
             if (sendChart) {
-                sendChart.data.labels.push('');
+                let timeElapsedStr = '';
+                if (sendStartTime > 0) {
+                    const elapsedSecs = Math.floor((now - sendStartTime) / 1000);
+                    timeElapsedStr = elapsedSecs + 's';
+                }
+                sendChart.data.labels.push(timeElapsedStr);
                 sendChart.data.datasets[0].data.push(speedMBps);
                 if (sendChart.data.labels.length > 20) {
                     sendChart.data.labels.shift();
@@ -1468,7 +1911,12 @@ function updateReceiveProgress(current, total) {
             if(rEtaSpan) rEtaSpan.innerText = formatETA(etaSeconds);
             
             if (receiveChart) {
-                receiveChart.data.labels.push('');
+                let timeElapsedStr = '';
+                if (receiveStartTime > 0) {
+                    const elapsedSecs = Math.floor((now - receiveStartTime) / 1000);
+                    timeElapsedStr = elapsedSecs + 's';
+                }
+                receiveChart.data.labels.push(timeElapsedStr);
                 receiveChart.data.datasets[0].data.push(speedMBps);
                 if (receiveChart.data.labels.length > 20) {
                     receiveChart.data.labels.shift();
@@ -1625,15 +2073,15 @@ async function sendFolderStream() {
             if (chunkQueue.length > 0) {
                 const chunk = chunkQueue.shift();
                 
-                while (!isTransferCancelled && dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 1024 * 1024) {
+                while (!isTransferCancelled && dataConnection.dataChannel && dataConnection.dataChannel.bufferedAmount > 8 * 1024 * 1024) {
                     await new Promise(r => setTimeout(r, 50));
                 }
-                if (isTransferCancelled) break;
+                if (isTransferCancelled || isCurrentFileSkipped) break;
                 
                 offset += chunk.length;
                 updateSendProgress(offset, totalSize);
                 
-                const encrypted = await encryptChunk(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
+                const encrypted = await encryptChunk(chunk);
                 dataConnection.send(encrypted);
                 
             } else if (isZippingDone) {
@@ -1654,16 +2102,17 @@ async function sendFolderStream() {
     sendLoop();
 
     for (let i = 0; i < selectedFiles.length; i++) {
-        if (isTransferCancelled) break;
+        if (isTransferCancelled || isCurrentFileSkipped) break;
         const file = selectedFiles[i];
         const path = file.webkitRelativePath || file.name;
         
         const zipStream = new fflate.ZipPassThrough(path);
+        zipStream.compression = 0; // Disable compression for maximum CPU/Transfer speed
         zip.add(zipStream);
 
         const reader = file.stream().getReader();
         while (true) {
-            if (isTransferCancelled) break;
+            if (isTransferCancelled || isCurrentFileSkipped) break;
             const { done, value } = await reader.read();
             if (done) {
                 zipStream.push(new Uint8Array(0), true);
@@ -1676,7 +2125,7 @@ async function sendFolderStream() {
             zipStream.push(value);
         }
     }
-    if (!isTransferCancelled) {
+    if (!isTransferCancelled && !isCurrentFileSkipped) {
         zip.end();
     }
 }
@@ -1689,116 +2138,7 @@ if (folderInput) {
     });
 }
 
-// ==========================================
-// DEMO MODE FOR UI DEBUGGING
-// ==========================================
-function enableDemoMode() {
-    console.log('Demo mode activated!');
-    
-    // Switch to room screen
-    homeScreen.classList.remove('active');
-    roomScreen.classList.add('active');
-    document.getElementById('display-room-id').innerText = 'DEMO-123';
-    document.getElementById('header-status-dot').className = 'status-dot online';
 
-    // Show left and right columns
-    if (qrWrapper) qrWrapper.classList.add('hidden');
-    fileSelectionContainer.classList.remove('hidden');
-    document.getElementById('room-transfer-pane').classList.remove('hidden');
-
-    // Make charts visible and initialize them
-    initCharts();
-
-    // Setup dummy Send Progress
-    sendProgressContainer.classList.remove('hidden');
-    document.getElementById('send-status').innerText = 'Sending: demo_video.mp4';
-    document.getElementById('send-progress-text').innerText = '65%';
-    document.getElementById('send-progress-fill').style.width = '65%';
-    document.getElementById('send-speed').innerText = '12.5 MB/s';
-    document.getElementById('send-eta').innerText = '00:15 left';
-    
-    // Setup dummy Receive Progress
-    receiveProgressContainer.classList.remove('hidden');
-    document.getElementById('receive-status').innerText = 'Receiving: project_assets.zip';
-    document.getElementById('receive-progress-text').innerText = '32%';
-    document.getElementById('receive-progress-fill').style.width = '32%';
-    document.getElementById('receive-speed').innerText = '8.2 MB/s';
-    document.getElementById('receive-eta').innerText = '01:05 left';
-
-    // Populate charts with dummy data
-    if (sendChart) {
-        sendChart.data.labels = Array.from({length: 20}, (_, i) => i);
-        sendChart.data.datasets[0].data = Array.from({length: 20}, () => Math.random() * 20 + 5);
-        sendChart.update();
-    }
-    if (receiveChart) {
-        receiveChart.data.labels = Array.from({length: 20}, (_, i) => i);
-        receiveChart.data.datasets[0].data = Array.from({length: 20}, () => Math.random() * 15 + 2);
-        receiveChart.update();
-    }
-
-    // Add dummy Sent Files
-    const sentFilesDropdown = document.getElementById('sent-files-dropdown');
-    if(sentFilesDropdown) {
-        sentFilesDropdown.classList.remove('hidden');
-        document.getElementById('sent-files-container').innerHTML = `
-            <div class="file-row state-success">
-                <span class="material-symbols-rounded file-icon">description</span>
-                <div class="file-info">
-                    <span class="file-name">document.pdf</span>
-                    <span class="file-size">2.4 MB</span>
-                </div>
-                <span class="status-text">Done</span>
-            </div>
-            <div class="file-row state-success">
-                <span class="material-symbols-rounded file-icon">image</span>
-                <div class="file-info">
-                    <span class="file-name">vacation_photo.jpg</span>
-                    <span class="file-size">4.1 MB</span>
-                </div>
-                <span class="status-text">Done</span>
-            </div>
-        `;
-    }
-
-    // Add dummy Received Files
-    downloadListHeader.classList.remove('hidden');
-    downloadLinksContainer.innerHTML = `
-        <div class="file-row state-success">
-            <span class="material-symbols-rounded file-icon">audio_file</span>
-            <div class="file-info">
-                <span class="file-name">song.mp3</span>
-                <span class="file-size">5.8 MB</span>
-            </div>
-            <button class="btn transparent icon-btn small"><span class="material-symbols-rounded">download</span></button>
-        </div>
-        <div class="file-row state-success">
-            <span class="material-symbols-rounded file-icon">folder_zip</span>
-            <div class="file-info">
-                <span class="file-name">source_code.zip</span>
-                <span class="file-size">15.2 MB</span>
-            </div>
-            <button class="btn transparent icon-btn small"><span class="material-symbols-rounded">download</span></button>
-        </div>
-    `;
-
-    // Show Text Drop
-    const txtContainer = document.getElementById('received-text-container');
-    if (txtContainer) {
-        txtContainer.classList.remove('hidden');
-        document.getElementById('received-text-content').innerText = 'https://github.com/DroperX/repo';
-    }
-}
-
-// Automatically trigger if ?demo=1
-if (window.location.search.includes('demo=1')) {
-    // Wait for DOM to be ready
-    setTimeout(() => {
-        enableDemoMode();
-    }, 500);
-}
-
-// ==========================================
 // CHART.JS INITIALIZATION
 // ==========================================
 let sendChart = null;
@@ -1815,8 +2155,17 @@ function initCharts() {
         maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
         scales: {
-            x: { display: false },
-            y: { display: false, beginAtZero: true }
+            x: { 
+                display: true,
+                grid: { display: false, drawBorder: true },
+                ticks: { color: '#888', maxTicksLimit: 5 }
+            },
+            y: { 
+                display: true, 
+                beginAtZero: true,
+                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                ticks: { color: '#888', callback: function(value) { return value + ' MB/s'; }, maxTicksLimit: 5 }
+            }
         },
         elements: {
             point: { radius: 0 },

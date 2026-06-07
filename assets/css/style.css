@@ -97,9 +97,6 @@ button {
     justify-content: space-between;
     align-items: center;
     padding: 0 24px;
-    background: rgba(5, 5, 5, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
@@ -512,6 +509,10 @@ input[type="text"] {
     transition: border-color 0.2s ease;
 }
 
+.sent-files-dropdown {
+    border: 1px solid var(--border);
+}
+
 input[type="text"]:focus {
     border-color: var(--accent);
 }
@@ -719,9 +720,79 @@ input[type="file"] {
 
 #file-details {
     margin: 16px 0px;
-    font-size: 0.9rem;
-    color: var(--success);
+    width: 100%;
+}
+
+/* --- Selected File UI (Modern iOS List) --- */
+.ios-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.ios-file-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+.ios-file-icon {
+    width: 32px;
+    height: 32px;
+    background: rgba(10, 132, 255, 0.1);
+    color: var(--accent);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.ios-file-icon .material-symbols-rounded {
+    font-size: 18px;
+}
+.ios-file-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    justify-content: center;
+    align-items: start;
+}
+.ios-file-name {
     font-weight: 500;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    color: var(--text-primary);
+}
+.ios-file-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+.ios-remove-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 50%;
+    transition: 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.ios-remove-btn:hover {
+    color: var(--danger);
+    background: rgba(255, 69, 58, 0.1);
 }
 
 /* --- Progress Bars --- */
@@ -821,10 +892,11 @@ input[type="file"] {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--bg-main);
-    padding: 12px 16px;
-    border-radius: 12px;
-    }
+    background: rgba(0, 0, 0, 0.1);
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
 
 .sent-file-chip {
     display: inline-flex;
@@ -853,15 +925,12 @@ input[type="file"] {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 24px;
-    margin-bottom: -8px;
 }
 
 .download-list-header h4 {
     font-size: 0.9rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    font-weight: 500;
 }
 
 .download-file-row .file-name {
@@ -1086,53 +1155,73 @@ input[type="file"] {
 }
 
 
-/* Desktop Split Layout for Room Screen */
+/* Desktop Split Layout for Room Screen (Forced Globally) */
 .desktop-split-layout {
     display: flex;
-    flex-direction: column;
-    gap: 20px;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0 !important;
 }
 
-@media (min-width: 1024px) {
+@media (max-width: 920px) {
+    #room-screen {
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+    }
     .desktop-split-layout {
-        flex-direction: row;
-        align-items: flex-start;
-        justify-content: center;
-        gap: 32px;
+        flex-direction: column !important;
+        gap: 16px !important;
+        width: 100% !important;
+        margin: 0 !important;
     }
-    .room-col-left {
-        flex: 1;
-        min-width: 350px;
-        max-width: 450px;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-        position: sticky;
-        top: 20px;
-        padding-bottom: 16px;
+    .room-col-left, .room-col-right {
+        position: static !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
     }
-    .room-col-left .room-header,
-    .room-col-left .upload-options,
-    .room-col-left .file-label-massive,
-    .room-col-left .file-selection,
-    .room-col-left .transfer-info {
-        margin-bottom: 0 !important;
-    }
-    .room-col-left .sent-files-dropdown {
-        margin-top: 0 !important;
-    }
-    #received-text-container {
-        margin-bottom: 0 !important;
-    }
-    .room-col-right {
-        flex: 1;
-        min-width: 450px;
-        max-width: 500px;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-        padding-bottom: 16px;
-    }
+}
+
+/* Strip margins from all stacked column children so gap does all the work */
+.desktop-split-layout .room-col-left > *,
+.desktop-split-layout .room-col-right > *,
+.room-transfer-pane > *,
+.transfers-container > * {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.transfer-controls {
+    margin: 0 !important;
+}
+
+.chart-container {
+    margin: 16px 0 !important;
+}
+
+#file-details {
+    margin: 8px 0 !important;
+}
+
+/* Inner containers that act as flex columns should also use gap */
+.room-col-left, .room-col-right, .room-transfer-pane, .transfers-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px !important;
+}
+
+.room-col-left, .room-col-right {
+    padding: 16px;
+    flex: 1;
+    min-width: 450px;
+    max-width: 500px;
+    padding-bottom: 16px;
+}
+
+.room-col-left {
+    position: sticky;
+    top: 20px;
 }
 
 /* --- Footer --- */
@@ -1482,7 +1571,8 @@ input[type="file"] {
    iOS 17 ACTION MENU MODAL
    ========================================= */
 .modal-ios17 {
-    width: 370px;
+    max-width: 400px;
+    width: 100%;
     box-sizing: border-box;
     background: #1C1C1E;
     border-radius: 24px;
@@ -1547,7 +1637,8 @@ input[type="file"] {
 
 /* Modal specific inline styles extracted */
 .modal-ios17-alert {
-    max-width: 320px;
+    max-width: 400px;
+    width: 100%;
     padding: 0;
     text-align: center;
     overflow: hidden;
@@ -1575,6 +1666,56 @@ input[type="file"] {
     font-size: 1.1rem;
     font-weight: 600;
     padding: 16px;
+}
+.ios-modal-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.95rem;
+    color: #fff;
+    background: rgba(255,255,255,0.05);
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-top: 15px;
+}
+.ios-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+.ios-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.ios-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(120, 120, 128, 0.32);
+    transition: .3s cubic-bezier(0.25, 0.1, 0.25, 1);
+    border-radius: 24px;
+}
+.ios-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .3s cubic-bezier(0.25, 0.1, 0.25, 1);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.ios-switch input:checked + .ios-slider {
+    background-color: #34C759;
+}
+.ios-switch input:checked + .ios-slider:before {
+    transform: translateX(20px);
 }
 .ios17-card-padded {
     padding: 15px;
@@ -1607,4 +1748,6 @@ input[type="file"] {
     border-radius: 0;
     width: 100%;
 }
+
+
 
