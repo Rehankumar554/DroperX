@@ -59,6 +59,11 @@ body {
     color: var(--text-primary);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
 }
 
 /* Global iOS Soft Dim Tap Effect */
@@ -69,12 +74,6 @@ a, button {
 a:active, button:active, .btn:active {
     opacity: 0.6;
     transition: opacity 0s;
-}
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow-x: hidden;
 }
 
 a {
