@@ -1,3 +1,17 @@
+// ==========================================
+// CONSOLE SILENCER (For Production/Clean Console)
+// Comment out the function call below to re-enable console logs
+// ==========================================
+function disableConsoleLogs() {
+    console.log = function() {};
+    console.warn = function() {};
+    console.error = function() {};
+    console.info = function() {};
+    console.debug = function() {};
+}
+disableConsoleLogs(); // <-- Comment this line to see console messages again.
+// ==========================================
+
 // SECURITY: Sanitize inputs to prevent XSS (Cross-Site Scripting)
 function sanitizeHTML(str) {
     if (!str) return '';
@@ -10,6 +24,11 @@ function sanitizeHTML(str) {
 let sharedCryptoKey = null;
 
 async function deriveKey(roomId) {
+    if (!window.crypto || !window.crypto.subtle) {
+        console.warn("crypto.subtle is unavailable (HTTP context). End-to-end encryption disabled.");
+        sharedCryptoKey = null;
+        return;
+    }
     const enc = new TextEncoder();
     const keyMaterial = await window.crypto.subtle.importKey(
         "raw",
@@ -174,6 +193,8 @@ function showAlert(title, message, callback = null) {
     };
 }
 
+let pendingDeclineCallback = null;
+
 function showConfirm(title, message, onAccept, onDecline) {
     const confirmModal = document.getElementById('confirm-modal');
     const titleEl = document.getElementById('confirm-modal-title');
@@ -183,6 +204,12 @@ function showConfirm(title, message, onAccept, onDecline) {
 
     if (!confirmModal) return;
 
+    if (pendingDeclineCallback) {
+        // If a new confirm overwrites an old one, explicitly decline the old one!
+        pendingDeclineCallback();
+    }
+    pendingDeclineCallback = onDecline;
+
     titleEl.innerText = title;
     msgEl.innerText = message;
     
@@ -190,6 +217,7 @@ function showConfirm(title, message, onAccept, onDecline) {
     setTimeout(() => confirmModal.classList.add('show'), 10);
     
     acceptBtn.onclick = () => {
+        pendingDeclineCallback = null;
         confirmModal.classList.remove('show');
         setTimeout(() => {
             confirmModal.classList.add('hidden');
@@ -198,6 +226,7 @@ function showConfirm(title, message, onAccept, onDecline) {
     };
     
     declineBtn.onclick = () => {
+        pendingDeclineCallback = null;
         confirmModal.classList.remove('show');
         setTimeout(() => {
             confirmModal.classList.add('hidden');
@@ -249,9 +278,15 @@ if (deleteRoomBtn) {
         createRoomBtn.disabled = false;
         createRoomBtn.innerHTML = 'Create Room';
         
-                document.getElementById('create-room-initial').classList.remove('hidden');
-        document.getElementById('create-room-waiting').classList.remove('show'); setTimeout(() => document.getElementById('create-room-waiting').classList.add('hidden'), 300);
+        document.getElementById('create-room-initial').classList.remove('hidden');
+        document.getElementById('create-room-waiting').classList.remove('show'); 
+        setTimeout(() => document.getElementById('create-room-waiting').classList.add('hidden'), 300);
         showToast('Room deleted successfully.', 'info');
+        
+        // Ensure we go back to the home screen if we were stranded
+        if (typeof showScreen === 'function' && typeof homeScreen !== 'undefined') {
+            showScreen(homeScreen);
+        }
     });
 }
 
@@ -308,6 +343,9 @@ function generateRoomId() {
 function showScreen(screen) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
+    
+    // Reset scroll position to top when switching screens
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     
     // Toggle "Get Started" nav link visibility
     const navGetStartedBtn = document.getElementById('nav-get-started-btn');
@@ -442,6 +480,13 @@ async function initStandbyPeer() {
                 displayRoomId.innerText = roomId;
                 showScreen(roomScreen);
                 setupDataConnection();
+                
+                // Hide the waiting modal for the host
+                const waitingModal = document.getElementById('create-room-waiting');
+                if (waitingModal) {
+                    waitingModal.classList.remove('show');
+                    setTimeout(() => waitingModal.classList.add('hidden'), 300);
+                }
                 
                 // Stop broadcasting
                 if (typeof window.broadcastNearbyPresence === 'function') {
@@ -581,29 +626,32 @@ window.joinNearbyRoom = async function(targetRoomId) {
     displayRoomId.innerText = targetRoomId;
     
     // Pass metadata so the receiver knows this is a nearby connection and requires a prompt
-    dataConnection = peer.connect(targetRoomId, { metadata: { method: 'nearby' } });
+    const localConn = peer.connect(targetRoomId, { metadata: { method: 'nearby' } });
+    dataConnection = localConn;
     
     let hasAccepted = false;
     
     // Fallback timeout in case receiver doesn't answer or declines
     const connTimeout = setTimeout(() => {
-        if (!hasAccepted && dataConnection) {
-            showToast("Connection declined or timed out", "error");
-            dataConnection.close();
-            dataConnection = null;
+        if (!hasAccepted && localConn) {
+            if (typeof window.resetNearbyCards === 'function') window.resetNearbyCards();
+            if (dataConnection === localConn) {
+                showToast("Connection declined or timed out", "error");
+                dataConnection = null;
+            }
+            localConn.close();
         }
     }, 15000); // 15 seconds to accept
     
-    dataConnection.on('open', () => {
+    localConn.on('open', () => {
         showToast("Waiting for receiver to accept...", "info");
         
         const acceptListener = (data) => {
             if (data && data.command === 'CONNECTION_ACCEPTED') {
                 hasAccepted = true;
                 clearTimeout(connTimeout);
-                // PeerJS workaround to remove listener: just set it to null or ignore it.
-                // It's safer to just let setupDataConnection overwrite or handle it.
-                // We'll just call setupDataConnection which adds its own listeners.
+                if (typeof window.resetNearbyCards === 'function') window.resetNearbyCards();
+                // We'll call setupDataConnection which adds its own listeners to global dataConnection.
                 showScreen(roomScreen);
                 setupDataConnection();
                 
@@ -614,13 +662,16 @@ window.joinNearbyRoom = async function(targetRoomId) {
             }
         };
         
-        dataConnection.on('data', acceptListener);
+        localConn.on('data', acceptListener);
     });
     
-    dataConnection.on('close', () => {
+    localConn.on('close', () => {
         if (!hasAccepted) {
-            showToast("Connection declined", "error");
-            dataConnection = null;
+            if (typeof window.resetNearbyCards === 'function') window.resetNearbyCards();
+            if (dataConnection === localConn) {
+                showToast("Connection declined", "error");
+                dataConnection = null;
+            }
         }
     });
 };
@@ -780,25 +831,46 @@ function setupDataConnection() {
                 const txtContent = document.getElementById('received-text-content');
                 if (txtContainer && txtContent) {
                     txtContainer.classList.remove('hidden');
-                    txtContent.innerText = parsed.text;
-                    showToast('Secure message received', 'success');
+                    appendMessage(parsed.text, 'remote');
                 }
                 return;
             }
 
             if (parsed.command === 'CANCEL_TRANSFER') {
                 isTransferCancelled = true;
-                receiveStatus.innerText = "Transfer Cancelled by Sender!";
-                receiveProgressContainer.classList.add('state-error');
-                receiveBuffer = [];
-                if (fileStream) {
-                    try { fileStream.abort(); } catch(e){}
-                    fileStream = null;
+                
+                // If we were receiving
+                if (fileMeta) {
+                    receiveStatus.innerText = "Transfer Cancelled by Sender!";
+                    receiveProgressContainer.classList.add('state-error');
+                    receiveBuffer = [];
+                    if (fileStream) {
+                        try { fileStream.abort(); } catch(e){}
+                        fileStream = null;
+                    }
+                    setTimeout(() => {
+                        receiveProgressContainer.classList.add('hidden');
+                        receiveProgressContainer.classList.remove('state-error');
+                    }, 4000);
                 }
-                setTimeout(() => {
-                    receiveProgressContainer.classList.add('hidden');
-                    receiveProgressContainer.classList.remove('state-error');
-                }, 4000);
+                
+                // If we were sending
+                if (isTransferring) {
+                    sendStatus.innerText = "Transfer Cancelled by Receiver!";
+                    sendProgressContainer.classList.add('state-error');
+                    cancelTransferBtn.classList.add('hidden');
+                    pauseTransferBtn.classList.add('hidden');
+                    setTimeout(() => {
+                        sendProgressContainer.classList.add('hidden');
+                        sendProgressContainer.classList.remove('state-error');
+                        sendFileBtn.disabled = true;
+                        document.getElementById('file-selection-form').reset();
+                        fileDetails.innerText = '';
+                        selectedFiles = [];
+                        window.isZippingFolder = false;
+                        isTransferring = false;
+                    }, 3000);
+                }
                 return;
             }
 
@@ -882,7 +954,7 @@ function setupDataConnection() {
                         fileStream = null;
                     }
                 } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                    showToast("No HTTPS detected. Falling back to RAM limit.", "warning");
+                    console.warn("No HTTPS detected. Falling back to RAM limit.");
                 }
                 
                 // Automatically accept the file (RAM Fallback)
@@ -900,7 +972,7 @@ function setupDataConnection() {
             }
             const decryptedBuffer = await decryptChunk(bufferToDecrypt);
             if (!decryptedBuffer) {
-                showToast("Decryption error. File corrupted.", "error");
+                console.warn("Decryption error. File corrupted.");
                 return;
             }
             
@@ -920,8 +992,19 @@ function setupDataConnection() {
                     }
                 } catch(e) {
                     if (isTransferCancelled) return;
-                    console.error("Stream write error:", e);
-                    showToast("Streaming failed. Connection lost?", "error");
+                    console.warn("Direct stream rejected by browser. Falling back to RAM...");
+                    
+                    try { fileStream.abort(); } catch(err){}
+                    fileStream = null;
+                    
+                    // Immediately process this chunk in RAM instead
+                    receiveBuffer.push(decryptedBuffer);
+                    receivedSize += decryptedBuffer.byteLength;
+                    updateReceiveProgress(receivedSize, fileMeta.size);
+                    
+                    if (receivedSize >= fileMeta.size && !fileMeta.isZipStream) {
+                        finalizeReceive();
+                    }
                 }
             } else {
                 receiveBuffer.push(decryptedBuffer);
@@ -1063,16 +1146,17 @@ cancelTransferBtn.addEventListener('click', () => {
         sendProgressContainer.classList.add('hidden');
         sendProgressContainer.classList.remove('state-error');
         sendFileBtn.disabled = true;
-        fileInput.value = '';
+        document.getElementById('file-selection-form').reset();
         fileDetails.innerText = '';
         selectedFiles = [];
+        window.isZippingFolder = false;
         isTransferring = false;
     }, 3000);
 });
 
 function handleFolderSelection(filesArray) {
     if (isTransferring) {
-        showToast("Cannot select new files while a transfer is in progress.", "error");
+        console.warn("Cannot select new files while a transfer is in progress.");
         return;
     }
     if (filesArray.length > 0) {
@@ -1094,7 +1178,7 @@ function handleFolderSelection(filesArray) {
 
 function handleFileSelection(filesArray) {
     if (isTransferring) {
-        showToast("Cannot select new files while a transfer is in progress.", "error");
+        console.warn("Cannot select new files while a transfer is in progress.");
         return;
     }
     if (filesArray.length > 0) {
@@ -1117,7 +1201,7 @@ fileInput.addEventListener('change', (e) => {
 function interceptFileSelection(e) {
     if (isTransferring) {
         e.preventDefault();
-        showToast('Cannot select new files while a transfer is in progress.', 'error');
+        console.warn('Cannot select new files while a transfer is in progress.');
     }
 }
 fileInput.addEventListener('click', interceptFileSelection);
@@ -1160,11 +1244,11 @@ roomScreen.addEventListener('drop', (e) => {
 
 sendFileBtn.addEventListener('click', () => {
     if (isTransferring) {
-        showToast("A transfer is already in progress.", "error");
+        console.warn("A transfer is already in progress.");
         return;
     }
     if (selectedFiles.length === 0 || !dataConnection || !dataConnection.open) {
-        showToast("Connection not ready or no files selected.", "error");
+        console.warn("Connection not ready or no files selected.");
         return;
     }
 
@@ -1195,14 +1279,14 @@ function sendNextFile() {
         sendProgressContainer.classList.add('state-success');
         sendProgressFill.style.width = '100%';
         sendProgressText.innerText = '100%';
-        
         setTimeout(() => {
             sendProgressContainer.classList.add('hidden');
             sendProgressContainer.classList.remove('state-success');
             sendFileBtn.disabled = true;
-            fileInput.value = '';
+            document.getElementById('file-selection-form').reset();
             fileDetails.innerText = '';
             selectedFiles = [];
+            window.isZippingFolder = false;
             isTransferring = false;
         }, 3000);
         return;
@@ -1256,13 +1340,13 @@ function sendNextFile() {
             checkPauseAndRead();
         } catch (err) {
             console.error("Chunk processing error:", err);
-            showToast("Error processing file chunk", "error");
+            console.warn("Error processing file chunk");
         }
     };
 
     fileReader.onerror = () => {
         console.error("FileReader error:", fileReader.error);
-        showToast("Error reading file", "error");
+        console.warn("Error reading file");
     };
 
     const readSlice = (o) => {
@@ -1474,7 +1558,7 @@ clearDownloadsBtn.addEventListener('click', () => {
     downloadListHeader.classList.add('hidden');
     receiveProgressContainer.classList.add('hidden');
     receiveProgressContainer.classList.remove('state-success', 'state-error');
-    showToast('Received files cleared', 'info');
+    console.log('Received files cleared');
 });
 
 leaveRoomBtn.addEventListener('click', () => {

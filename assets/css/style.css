@@ -1447,7 +1447,7 @@ input[type="file"] {
 
 .stack-card:hover .stack-action {
     background: var(--accent);
-    color: #000;
+    color: #fff;
 }
 
 @keyframes drop-in {

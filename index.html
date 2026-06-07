@@ -223,8 +223,10 @@
 
                 <!-- File Selection (Hidden until connected) -->
                 <div class="file-selection hidden glass-panel" id="file-selection-container">
-                    <input type="file" id="file-input" multiple />
-                    <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;" />
+                    <form id="file-selection-form">
+                        <input type="file" id="file-input" multiple />
+                        <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;" />
+                    </form>
 
                     <div class="upload-options" style="display: flex; gap: 16px; margin-bottom: 20px;">
                         <label for="file-input" class="file-label-massive" style="flex: 1;">
@@ -241,7 +243,7 @@
 
                     <div id="file-details"></div>
                     <button id="send-file-btn" class="btn primary giant" disabled>
-                        <span class="material-symbols-rounded">send</span> Send Transfer
+                        <span class="material-symbols-rounded">send</span> Send
                     </button>
                 </div>
 

@@ -14,11 +14,25 @@ let activeNearbyPeers = {};
 
 // Simple hash function for privacy
 async function hashIP(ipStr) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(ipStr);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+    if (window.crypto && window.crypto.subtle) {
+        try {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(ipStr);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+        } catch (e) {
+            // fallback
+        }
+    }
+    // Fallback simple hash if crypto.subtle is unavailable (e.g. HTTP over local IP)
+    let hash = 0;
+    for (let i = 0; i < ipStr.length; i++) {
+        const char = ipStr.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16).padStart(8, '0') + "fallback";
 }
 
 // Generate a friendly device name based on User-Agent
@@ -53,19 +67,40 @@ async function initNearby() {
         if (nameDisplay) {
             nameDisplay.innerText = myDeviceName;
         }
+
+        let topicKey = null;
+        const hostname = window.location.hostname;
         
-        // Fetch public IP using free API
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
+        // If we are NOT in production (e.g., localhost, ngrok, port forwarding), 
+        // group all development traffic into one shared topic to fix CGNAT & hostname mismatch issues.
+        if (hostname !== "droperx.vercel.app" && !hostname.endsWith("vercel.app")) {
+            topicKey = "local_development_mode";
+            console.log("Development mode detected. Using shared local discovery topic.");
+        } else {
+            // Production: Fetch public IP using free API with fallback
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                if (data && data.ip) topicKey = data.ip;
+            } catch(e) {
+                try {
+                    const response = await fetch('https://api.seeip.org/jsonip');
+                    const data = await response.json();
+                    if (data && data.ip) topicKey = data.ip;
+                } catch(e2) {
+                    console.warn("Could not fetch IP from fallbacks.", e2);
+                }
+            }
+        }
         
-        if (data && data.ip) {
-            networkBaseTopic = "droperx/v2/" + await hashIP(data.ip);
+        if (topicKey) {
+            networkBaseTopic = "droperx/v2/" + await hashIP(topicKey);
             myTopic = networkBaseTopic + "/" + myDeviceId;
             console.log("Joined Network Topic:", networkBaseTopic);
             connectMQTT();
         }
     } catch (e) {
-        console.warn("Could not fetch IP for nearby discovery.", e);
+        console.warn("Error in initNearby:", e);
     }
 }
 
@@ -77,8 +112,8 @@ function connectMQTT() {
     
     // Generate a random client ID for MQTT
     const clientId = "droperx_" + Math.random().toString(16).substr(2, 8);
-    // Use EMQX public broker for better stability
-    const brokerUrl = "wss://broker.emqx.io:8084/mqtt";
+    // Use HiveMQ public broker for better stability across devices
+    const brokerUrl = "wss://broker.hivemq.com:8884/mqtt";
     
     mqttClient = mqtt.connect(brokerUrl, {
         clientId: clientId,
@@ -192,13 +227,6 @@ function renderNearbyCards() {
         card.className = "stack-card";
         card.style.animationDelay = `${index * 0.1}s`;
         
-        // When clicked, join the room!
-        card.onclick = () => {
-            if (typeof window.joinNearbyRoom === 'function') {
-                window.joinNearbyRoom(roomId);
-            }
-        };
-
         card.innerHTML = `
             <div class="stack-icon"><span class="material-symbols-rounded">${icon}</span></div>
             <div class="stack-info">
@@ -207,9 +235,52 @@ function renderNearbyCards() {
             </div>
             <div class="stack-action"><span class="material-symbols-rounded">add</span></div>
         `;
+        
+        // When clicked, join the room!
+        card.onclick = () => {
+            if (window.isConnectingToNearby || card.classList.contains('connecting')) return; // Prevent multiple clicks on ANY card
+            
+            window.isConnectingToNearby = true;
+            card.classList.add('connecting');
+            card.style.opacity = '0.7';
+            card.style.pointerEvents = 'none'; // Disable interactions
+            
+            // Show loader in the action div
+            const actionDiv = card.querySelector('.stack-action');
+            if (actionDiv) {
+                actionDiv.innerHTML = '<span class="material-symbols-rounded" style="animation: spin 1s linear infinite;">autorenew</span>';
+            }
+            
+            if (typeof window.joinNearbyRoom === 'function') {
+                window.joinNearbyRoom(roomId);
+            }
+            
+            // Fallback timeout to reset if connection hangs or is rejected
+            setTimeout(() => {
+                if (typeof window.resetNearbyCards === 'function') {
+                    window.resetNearbyCards();
+                }
+            }, 10000); // 10s timeout reset
+        };
+
         container.appendChild(card);
     });
 }
+
+// Global helper to instantly unlock the nearby UI (called when accepted or declined)
+window.resetNearbyCards = function() {
+    window.isConnectingToNearby = false;
+    const cards = document.querySelectorAll('.stack-card.connecting');
+    cards.forEach(card => {
+        card.classList.remove('connecting');
+        card.style.opacity = '1';
+        card.style.pointerEvents = 'auto';
+        const actionDiv = card.querySelector('.stack-action');
+        if (actionDiv) {
+            actionDiv.innerHTML = '<span class="material-symbols-rounded">add</span>';
+        }
+    });
+};
 
 // Function to be called by main.js when user creates a room
 window.broadcastNearbyPresence = function(roomId, isOpen) {
