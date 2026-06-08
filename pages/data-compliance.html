@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Disclaimer - DroperX Secure Online File Share</title>
-    <meta name="description" content="Legal disclaimer and liability information for DroperX, the secure online file share tool.">
-    <meta name="keywords" content="DroperX disclaimer, online file share liability, P2P legal, file sharing responsibility, secure file transfer disclaimer">
+    <title>Data Compliance Center - DroperX</title>
+    <meta name="description" content="Data Compliance and Regulatory Alignment Center for DroperX. Learn how our zero-knowledge P2P architecture satisfies GDPR, CCPA, and HIPAA requirements.">
+    <meta name="keywords" content="DroperX compliance, GDPR file sharing, HIPAA compliant transfer, CCPA data protection, zero-knowledge architecture, enterprise security">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;800&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
@@ -52,25 +52,54 @@
         </a>
     </div>
 
+    </div>
+
     <main class="page-container">
-        <h1 class="page-title">Disclaimer</h1>
+        <h1 class="page-title">Data Compliance Center</h1>
         
         <div class="page-content">
-            <p class="lead">Important liability limitations and user responsibilities regarding the use of DroperX.</p>
+            <p class="lead">Effective Date: June 2026. DroperX is engineered from the ground up for absolute data sovereignty. Because we transfer files directly between devices over encrypted channels, we structurally bypass traditional cloud storage compliance pitfalls.</p>
             
             <div class="legal-section">
-                <h3>1. Liability for Transferred Content</h3>
-                <p>DroperX is a decentralized transfer tool. We do not host, review, or control the files that users transfer. The sole responsibility for the legality, safety, and copyright compliance of transferred files lies entirely with the sender and the receiver.</p>
+                <h3>1. Zero-Knowledge Architecture</h3>
+                <p>DroperX employs a strict "Zero-Knowledge" infrastructure. The platform serves exclusively as an ephemeral signaling broker to establish WebRTC connections. The underlying file payloads are never routed through, processed by, or stored on RKS Development Studio servers.</p>
+                <p>This architectural decision means that it is technologically impossible for DroperX administrators, ISPs, or unauthorized third parties to intercept, scan, or compromise the integrity of the transferred data.</p>
             </div>
             
             <div class="legal-section">
-                <h3>2. No Liability for Data Loss</h3>
-                <p>While WebRTC is a robust protocol, network interruptions may cause transfers to fail or corrupt. We are not liable for any data loss, business interruption, or damages arising from the use or inability to use the DroperX service.</p>
+                <h3>2. EU General Data Protection Regulation (GDPR) Alignment</h3>
+                <p><strong>2.1 Role Exemption:</strong> Under the GDPR, an entity is a "Data Processor" if it stores or processes personal data on behalf of a "Data Controller". Because DroperX transfers occur exclusively Peer-to-Peer without centralized storage, DroperX is exempt from Data Processor classification concerning the file payloads. We do not have access to the data to process it.</p>
+                <p><strong>2.2 Right to be Forgotten (Article 17):</strong> DroperX enforces an inherent "Right to be Forgotten." Since no personal files or identifiable accounts are ever stored on our servers, there is no centralized data footprint to delete. The data only exists on the sending and receiving devices.</p>
+                <p><strong>2.3 Data Encryption (Article 32):</strong> All WebRTC connections are protected by mandatory Datagram Transport Layer Security (DTLS) and Secure Real-time Transport Protocol (SRTP). This provides robust End-to-End Encryption (E2EE), satisfying Article 32’s requirement for securing personal data in transit.</p>
+            </div>
+
+            <div class="legal-section">
+                <h3>3. Health Insurance Portability and Accountability Act (HIPAA)</h3>
+                <p>Healthcare professionals and organizations require stringent safeguards (the HIPAA Security Rule) for transmitting Protected Health Information (PHI). DroperX facilitates HIPAA-compliant transfers through its structural design:</p>
+                <ul>
+                    <li><strong>No Business Associate Agreement (BAA) Required:</strong> Because DroperX does not store, transmit, or have access to the decryption keys for the PHI, the platform acts as a mere "conduit" under the HIPAA Conduit Exception Rule. Therefore, a BAA with RKS Development Studio is not required.</li>
+                    <li><strong>Transmission Security:</strong> The mandatory SRTP encryption ensures that all PHI remains securely encrypted during transit over the open internet, satisfying the HIPAA requirement for data-in-motion protection.</li>
+                </ul>
             </div>
             
             <div class="legal-section">
-                <h3>3. Security Disclosures</h3>
-                <p>We utilize industry-standard WebRTC encryption. However, you should only connect to and accept files from peers you trust. DroperX cannot prevent a malicious peer from sending you harmful software once you authorize the transfer.</p>
+                <h3>4. California Consumer Privacy Act (CCPA) & CPRA</h3>
+                <p>DroperX complies with the stringent privacy rights established by California law. We categorically declare that:</p>
+                <ul>
+                    <li>We <strong>do not sell</strong> any personal information (PII).</li>
+                    <li>We <strong>do not share</strong> user activity data with cross-context behavioral advertising networks.</li>
+                    <li>We operate without user accounts, severely limiting the collection of any consumer data, thus structurally eliminating the risk of large-scale CCPA-related data breaches.</li>
+                </ul>
+            </div>
+
+            <div class="legal-section">
+                <h3>5. SOC 2 & Enterprise Security Controls</h3>
+                <p>While DroperX operates on a decentralized P2P framework, it aligns with standard SOC 2 Trust Services Criteria (Security, Availability, Processing Integrity, Confidentiality, and Privacy). By utilizing browser-enforced WebRTC sandboxes, the security posture is effectively managed by modern browser security models (e.g., Chromium, WebKit) rather than relying on an external centralized cloud perimeter.</p>
+            </div>
+
+            <div class="legal-section">
+                <h3>6. Subpoenas & Law Enforcement Requests</h3>
+                <p>Because of our Zero-Knowledge architecture, RKS Development Studio cannot comply with subpoenas or warrants requesting the content of user file transfers. We simply do not possess the data, the decryption keys, or the logs of file payloads to hand over to any authority or government agency globally.</p>
             </div>
 
         </div>

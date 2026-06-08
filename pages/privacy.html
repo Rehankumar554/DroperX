@@ -52,6 +52,8 @@
         </a>
     </div>
 
+    </div>
+
     <main class="page-container">
         <h1 class="page-title">Privacy Policy</h1>
         
@@ -59,23 +61,33 @@
             <p class="lead">Effective Date: June 2026. At DroperX, privacy isn't just a promise; it is hardcoded into our architecture.</p>
             
             <div class="legal-section">
-                <h3>1. Information We Do Not Collect</h3>
-                <p>Because DroperX is a Peer-to-Peer (P2P) file transfer protocol, we <strong>do not</strong> collect, intercept, route, or store any of the files you transfer. We do not require you to create an account, provide an email address, or verify your identity.</p>
+                <h3>1. Zero Data Collection Architecture</h3>
+                <p>DroperX is structurally engineered around a "Privacy by Design" and "Zero-Knowledge" framework. We explicitly <strong>do not</strong> collect, route, log, or store any of the file payloads you transfer. The platform operates without user accounts, eliminating the need to harvest Personally Identifiable Information (PII) such as names, email addresses, or phone numbers. Your identity and the contents of your transfers remain entirely invisible to RKS Development Studio.</p>
             </div>
             
             <div class="legal-section">
-                <h3>2. How Transfers Work</h3>
-                <p>When you create a room, DroperX acts solely as a signaling server to exchange connection coordinates (SDP and ICE candidates) between you and your peer. Once the connection is established, the signaling server steps out of the way. Your files are transferred directly between your device and the receiving device over WebRTC data channels.</p>
+                <h3>2. The Role of the Signaling Server</h3>
+                <p>When you initiate a room on DroperX, our infrastructure acts solely as a signaling broker (utilizing PeerJS and MQTT protocols). The server's only function is to exchange volatile connection metadata—specifically Session Description Protocol (SDP) and Interactive Connectivity Establishment (ICE) candidates—between the sending and receiving devices. Once the direct WebRTC peer-to-peer (P2P) link is established, the signaling server is completely bypassed. This metadata is ephemeral and is permanently purged from memory immediately upon connection establishment or timeout.</p>
             </div>
             
             <div class="legal-section">
-                <h3>3. End-to-End Encryption</h3>
-                <p>All data sent through DroperX is inherently encrypted end-to-end using standard WebRTC security protocols (DTLS and SRTP). No third party, including DroperX, can decrypt or view the contents of your transfer.</p>
+                <h3>3. End-to-End Encryption (E2EE) Mechanisms</h3>
+                <p>All file transfers executed via DroperX's WebRTC data channels are protected by mandatory, military-grade End-to-End Encryption. We utilize Datagram Transport Layer Security (DTLS) for secure key exchange and Secure Real-time Transport Protocol (SRTP) for data encryption. Consequently, any data traversing the network is cryptographically scrambled and can only be decrypted by the intended recipient device. DroperX does not possess, generate, or manage the encryption keys, rendering it technologically impossible for us to intercept or decrypt your files.</p>
             </div>
             
             <div class="legal-section">
-                <h3>4. Cookies & Analytics</h3>
-                <p>We use strictly necessary local storage mechanisms (such as standard session storage) to maintain your connection state while the app is open. We do not use third-party tracking cookies or invasive analytics tools to profile our users.</p>
+                <h3>4. Strictly Necessary Local Storage</h3>
+                <p>To provide a seamless User Experience (UX), DroperX utilizes your browser's native `localStorage` and `sessionStorage` strictly for maintaining application state. This includes caching basic UI preferences (such as "Don't show again" warnings) and ephemeral session IDs. We strictly prohibit the use of third-party tracking cookies, invasive marketing pixels, or behavioral profiling analytics. Your local storage data never leaves your device.</p>
+            </div>
+
+            <div class="legal-section">
+                <h3>5. Global Privacy Rights (GDPR, CCPA, CPRA)</h3>
+                <p>Because DroperX does not collect or process Personally Identifiable Information (PII) or user files, the traditional obligations of a "Data Controller" or "Data Processor" under the General Data Protection Regulation (GDPR), California Consumer Privacy Act (CCPA), and California Privacy Rights Act (CPRA) are inherently satisfied by our technical architecture. There is no user data to request, rectify, or delete, as no user data is retained on our servers.</p>
+            </div>
+
+            <div class="legal-section">
+                <h3>6. Policy Modifications</h3>
+                <p>RKS Development Studio reserves the right to amend this Privacy Policy. Any material changes to our data handling practices will be reflected on this page. Because we do not collect contact information, we cannot notify users individually of changes; we encourage users to review this policy periodically.</p>
             </div>
 
         </div>
@@ -100,6 +112,7 @@
                     <h4>Legal</h4>
                     <a href="terms.html">Terms of Service</a>
                     <a href="privacy.html">Privacy Policy</a>
+                    <a href="data-compliance.html">Data Compliance</a>
                     <a href="disclaimer.html">Disclaimer</a>
                 </div>
                 <div class="footer-col">
@@ -124,3 +137,4 @@
         </footer>
 </body>
 </html>
+
