@@ -3542,6 +3542,7 @@ async function sendFolderStream() {
     fileIndex: 0,
     totalFiles: 1,
     isZipStream: true,
+    isFastMode: isFastMode,
   };
   dataConnection.send(metadata);
   isWaitingForAccept = true;
@@ -3595,8 +3596,12 @@ async function sendFolderStream() {
 
         lastZipChunk = chunk; // AIV: Track the final piece of the stream
 
-        const encrypted = await encryptChunk(chunk);
-        dataConnection.send(encrypted);
+        if (isFastMode) {
+          dataConnection.send(chunk.buffer);
+        } else {
+          const encrypted = await encryptChunk(chunk);
+          dataConnection.send(encrypted);
+        }
       } else if (isZippingDone) {
         if (!isTransferCancelled) {
           // AIV: Calculate Tail-End hash
