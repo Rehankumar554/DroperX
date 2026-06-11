@@ -73,7 +73,7 @@ async function initNearby() {
         
         // If we are NOT in production (e.g., localhost, ngrok, port forwarding), 
         // group all development traffic into one shared topic to fix CGNAT & hostname mismatch issues.
-        if (hostname !== "droperx.vercel.app" && !hostname.endsWith("vercel.app")) {
+        if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("192.168.") || hostname.startsWith("10.")) {
             topicKey = "local_development_mode";
             console.log("Development mode detected. Using shared local discovery topic.");
         } else {

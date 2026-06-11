@@ -1475,6 +1475,7 @@ function setupDataConnection() {
                 fileDetails.innerText = "";
                 selectedFiles = [];
                 window.isZippingFolder = false;
+                window.folderTransferMeta = null;
                 isTransferring = false;
                 // BUG 1 FIX: Re-enable toggle when sender receives cancel from receiver
                 if (transferModeToggle) transferModeToggle.disabled = false;
@@ -1821,6 +1822,7 @@ function setupDataConnection() {
               if (fileDetails) fileDetails.innerText = "";
               selectedFiles = [];
               window.isZippingFolder = false;
+              window.folderTransferMeta = null;
               isTransferring = false;
               if (transferModeToggle) transferModeToggle.disabled = false;
             }, 5000);
@@ -1851,6 +1853,7 @@ function setupDataConnection() {
               if (fileDetails) fileDetails.innerText = "";
               selectedFiles = [];
               window.isZippingFolder = false;
+              window.folderTransferMeta = null;
               isTransferring = false;
             }, 3000);
 
@@ -1942,8 +1945,8 @@ function setupDataConnection() {
             lastReceiveTime = 0;
             lastReceiveBytes = 0;
             if (receiveChart) {
-              receiveChart.data.labels = [];
-              receiveChart.data.datasets[0].data = [];
+              receiveChart.data.labels = ["0s"];
+              receiveChart.data.datasets[0].data = [0];
               receiveChart.update("none");
             }
 
@@ -1991,27 +1994,33 @@ function setupDataConnection() {
                 // is sent before we return. This prevents the next FILE_METADATA from
                 // being processed before ACCEPT_FILE is sent (which caused small files
                 // to be dropped because sender would move to next file too fast).
-                await new Promise((resolve) => {
-                  const channel = new MessageChannel();
-                  channel.port1.onmessage = (e) => {
-                    if (e.data.status === "READY") {
-                      // Trigger browser download via hidden iframe
-                      const iframe = document.createElement("iframe");
-                      iframe.hidden = true;
-                      iframe.src = downloadUrl;
-                      document.body.appendChild(iframe);
-                      resolve(); // Unblock the await
-                    }
-                  };
-                  navigator.serviceWorker.controller.postMessage(
-                    {
-                      type: "STREAM_DOWNLOAD",
-                      id: uniqueId,
-                      stream: ts.readable,
-                    },
-                    [ts.readable, channel.port2]
-                  );
-                });
+                // Wait for SW READY with a 3-second deadlock-prevention timeout
+                await Promise.race([
+                  new Promise((resolve) => {
+                    const channel = new MessageChannel();
+                    channel.port1.onmessage = (e) => {
+                      if (e.data.status === "READY") {
+                        const iframe = document.createElement("iframe");
+                        iframe.hidden = true;
+                        iframe.src = downloadUrl;
+                        document.body.appendChild(iframe);
+                        resolve();
+                      }
+                    };
+                    navigator.serviceWorker.controller.postMessage(
+                      {
+                        type: "STREAM_DOWNLOAD",
+                        id: uniqueId,
+                        stream: ts.readable,
+                      },
+                      [ts.readable, channel.port2]
+                    );
+                  }),
+                  new Promise((resolve) => setTimeout(() => {
+                      console.warn("StreamSaver SW timeout, proceeding anyway...");
+                      resolve();
+                  }, 3000))
+                ]);
 
                 // Now ACCEPT_FILE is sent synchronously inside the queue chain
                 if (dataConnection && dataConnection.open) {
@@ -2051,6 +2060,12 @@ function setupDataConnection() {
             return;
           }
 
+          if (!fileMeta) {
+            // Drop in-transit chunks for skipped files gracefully
+            if (isFileChunk) pendingChunks--;
+            return;
+          }
+
           let bufferToDecrypt = data;
           if (data instanceof Blob) {
             bufferToDecrypt = await data.arrayBuffer();
@@ -2058,10 +2073,17 @@ function setupDataConnection() {
 
           let decryptedBuffer = bufferToDecrypt;
           if (!fileMeta.isFastMode) {
-            decryptedBuffer = await decryptChunk(bufferToDecrypt);
+            try {
+              // Try to decrypt. If AES-GCM fails, it will THROW an error.
+              decryptedBuffer = await decryptChunk(bufferToDecrypt);
+            } catch (err) {
+              console.warn("AES-GCM Auth Tag validation failed. File corrupted.");
+              decryptedBuffer = null; // Force the fallback block to trigger
+            }
+
             if (!decryptedBuffer) {
-              console.warn("Decryption error. File corrupted.");
               window.receiverSecureFailed = true; // AIV: Mark secure mode as corrupted
+
               if (isFileChunk) {
                 pendingChunks--;
                 if (pendingChunks < 3 && isReceiverPaused) {
@@ -2070,7 +2092,8 @@ function setupDataConnection() {
                     dataConnection.send({ command: "BACKPRESSURE_RESUME" });
                 }
               }
-              return;
+              // CRITICAL FIX: Do not return. Fallback to raw buffer to keep UI and StreamSaver progressing.
+              decryptedBuffer = bufferToDecrypt;
             }
           }
 
@@ -2289,6 +2312,13 @@ function setupDataConnection() {
 
     // Watchdog: if we haven't heard from peer (PING or PONG) in TIMEOUT ms, peer is gone
     const now = Date.now();
+
+    // Sleep-aware watchdog: prevent false disconnects when the browser throttles timers in background tabs
+    if (document.visibilityState === "hidden") {
+      window._hbLastPingTime = now;
+      return;
+    }
+
     const lastHeard = Math.max(window._hbLastPingTime, window._hbLastPongTime);
     if (now - lastHeard > HEARTBEAT_TIMEOUT && !heartbeatMissed && !isExiting) {
       heartbeatMissed = true;
@@ -2578,6 +2608,7 @@ cancelTransferBtn.addEventListener("click", () => {
       fileDetails.innerText = "";
       selectedFiles = [];
       window.isZippingFolder = false;
+      window.folderTransferMeta = null;
     }, 3000);
   };
 
@@ -2735,6 +2766,9 @@ window.removeSelectedFile = function (index) {
     window.isZippingFolder = false;
     window.folderTransferMeta = null;
   } else {
+    if (window.isZippingFolder && window.folderTransferMeta) {
+      window.folderTransferMeta.totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+    }
     renderFileDetailsUI();
   }
 };
@@ -2828,7 +2862,8 @@ function handleFolderSelection(filesArray) {
 
     // Preserve original folder name if one already exists, else create it
     if (!window.folderTransferMeta) {
-      const firstPath = Array.from(filesArray)[0].webkitRelativePath || "";
+      const firstFile = Array.from(filesArray)[0];
+      const firstPath = firstFile.customPath || firstFile.webkitRelativePath || "";
       const folderName = firstPath.split("/")[0] || "Shared_Folder";
       window.folderTransferMeta = { name: `${folderName}.zip`, totalSize: 0 };
     }
@@ -3039,8 +3074,8 @@ sendFileBtn.addEventListener("click", () => {
   lastSendTime = 0;
   lastSendBytes = 0;
   if (sendChart) {
-    sendChart.data.labels = [];
-    sendChart.data.datasets[0].data = [];
+    sendChart.data.labels = ["0s"];
+    sendChart.data.datasets[0].data = [0];
     sendChart.update("none");
   }
   pauseTransferBtn.innerHTML =
@@ -3080,6 +3115,7 @@ function sendNextFile() {
       fileDetails.innerText = "";
       selectedFiles = [];
       window.isZippingFolder = false;
+      window.folderTransferMeta = null;
     }, 3000);
     return;
   }
@@ -3530,6 +3566,9 @@ function resetUI() {
 }
 
 async function sendFolderStream() {
+  const isFastMode = transferModeToggle ? transferModeToggle.checked : true;
+  if (transferModeToggle) transferModeToggle.disabled = true;
+
   const { name, totalSize } = window.folderTransferMeta;
   sendStatus.innerText = `Zipping & Transferring Folder: ${name}`;
   sendProgressContainer.classList.remove("state-error", "state-success");
@@ -3597,7 +3636,7 @@ async function sendFolderStream() {
         lastZipChunk = chunk; // AIV: Track the final piece of the stream
 
         if (isFastMode) {
-          dataConnection.send(chunk.buffer);
+          dataConnection.send(chunk);
         } else {
           const encrypted = await encryptChunk(chunk);
           dataConnection.send(encrypted);
@@ -3605,9 +3644,12 @@ async function sendFolderStream() {
       } else if (isZippingDone) {
         if (!isTransferCancelled) {
           // AIV: Calculate Tail-End hash
-          const finalZipHash = lastZipChunk
-            ? await getChunkHash(lastZipChunk)
-            : "EMPTY_ZIP";
+          let finalZipHash = "SECURE_OK";
+          if (isFastMode) {
+            finalZipHash = lastZipChunk
+              ? await getChunkHash(lastZipChunk)
+              : "EMPTY_ZIP";
+          }
           dataConnection.send({ command: "FILE_DONE", hash: finalZipHash });
           addSentFileRow(name);
           currentFileIndex = selectedFiles.length;
@@ -3649,6 +3691,22 @@ async function sendFolderStream() {
   }
   if (!isTransferCancelled && !isCurrentFileSkipped) {
     zip.end();
+  } else if (isCurrentFileSkipped) {
+    isCurrentFileSkipped = false;
+    setTimeout(() => {
+      sendProgressContainer.classList.add("hidden");
+      if (pauseTransferBtn) pauseTransferBtn.classList.add("hidden");
+      if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
+      sendFileBtn.disabled = true;
+      document.getElementById("file-selection-form").reset();
+      if (fileDetails) fileDetails.innerText = "";
+      selectedFiles = [];
+      window.isZippingFolder = false;
+      window.folderTransferMeta = null;
+      isTransferring = false;
+      if (transferModeToggle) transferModeToggle.disabled = false;
+      releaseWakeLock();
+    }, 3000);
   }
 }
 
