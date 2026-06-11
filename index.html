@@ -175,8 +175,8 @@
                     onclick="if(this.dataset.disabled) return; this.dataset.disabled = true; this.style.pointerEvents = 'none'; document.getElementById('create-room-btn').click(); setTimeout(() => { delete this.dataset.disabled; this.style.pointerEvents = 'auto'; }, 5000);">
                     <div id="create-room-initial"
                         style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%;">
-                        <span class="material-symbols-rounded portal-icon">call_made</span>
-                        <div class="portal-title">SEND</div>
+                        <span class="material-symbols-rounded portal-icon">wifi_tethering</span>
+                        <div class="portal-title">HOST</div>
                         <button id="create-room-btn" style="display:none;"></button>
                     </div>
 
@@ -185,9 +185,10 @@
 
                 <div class="portal-line"></div>
 
-                <div class="portal-side right" onclick="document.getElementById('join-room-modal').classList.remove('hidden'); setTimeout(() => document.getElementById('join-room-modal').classList.add('show'), 10);">
-                    <span class="material-symbols-rounded portal-icon">call_received</span>
-                    <div class="portal-title">TAKE</div>
+                <div class="portal-side right"
+                    onclick="document.getElementById('join-room-modal').classList.remove('hidden'); setTimeout(() => document.getElementById('join-room-modal').classList.add('show'), 10);">
+                    <span class="material-symbols-rounded portal-icon">login</span>
+                    <div class="portal-title">JOIN</div>
                 </div>
             </div>
 
@@ -195,12 +196,13 @@
             <div class="nearby-stack-container" id="nearby-devices-container">
                 <!-- Real devices will be injected here by nearby.js -->
             </div>
-            
-            <div id="my-device-name-display" style="text-align: center; font-size: 0.85rem; color: var(--text-secondary); margin-top: 12px; opacity: 0; display: none; transition: opacity 0.3s ease;">
+
+            <div id="my-device-name-display"
+                style="text-align: center; font-size: 0.85rem; color: var(--text-secondary); margin-top: 12px; opacity: 0; display: none; transition: opacity 0.3s ease;">
                 Visible as: <strong style="color: var(--text-primary);" id="my-device-name-text">...</strong>
             </div>
         </div>
-        
+
     </main>
 
     <!-- ROOM SCREEN (COMPACT LAYOUT) -->
@@ -228,23 +230,52 @@
                         <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;" />
                     </form>
 
-                    <div class="upload-options" style="display: flex; gap: 16px;">
-                        <label for="file-input" class="file-label-massive" style="flex: 1;">
-                            <span class="material-symbols-rounded upload-icon">cloud_upload</span>
-                            <span class="title">Select Files</span>
-                        </label>
-                        <label for="folder-input" class="file-label-massive"
-                            style="flex: 1; border-color: var(--accent);">
-                            <span class="material-symbols-rounded upload-icon"
-                                style="color: var(--accent);">folder_open</span>
-                            <span class="title">Select Folder</span>
-                        </label>
+                    <div id="drop-zone" class="drop-zone-container">
+                        <div class="drop-zone-text">
+                            <span class="material-symbols-rounded"
+                                style="font-size: 32px; color: var(--accent); opacity: 0.8;">drive_folder_upload</span>
+                            <p>Drag & drop files or folders here<br><span
+                                    style="font-size: 0.85rem; color: var(--text-secondary);">or use the buttons
+                                    below</span></p>
+                        </div>
+                        <div class="upload-options" style="display: flex; gap: 16px;">
+                            <label for="file-input" class="file-label-massive" style="flex: 1;">
+                                <span class="material-symbols-rounded upload-icon">cloud_upload</span>
+                                <span class="title">Select Files</span>
+                            </label>
+                            <label for="folder-input" class="file-label-massive"
+                                style="flex: 1; border-color: var(--accent);">
+                                <span class="material-symbols-rounded upload-icon"
+                                    style="color: var(--accent);">folder_open</span>
+                                <span class="title">Select Folder</span>
+                            </label>
+                        </div>
                     </div>
-
                     <div id="file-details"></div>
-                    <button id="send-file-btn" class="btn primary giant" disabled>
-                        <span class="material-symbols-rounded">send</span> Send
-                    </button>
+
+                    <!-- Transfer Mode Toggle + Send Button Row -->
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <!-- Toggle: left side -->
+                        <div class="transfer-mode-container"
+                            style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                            <label class="toggle-switch large-switch" title="Transfer Mode">
+                                <input type="checkbox" id="transfer-mode-toggle" checked>
+                                <span class="toggle-slider">
+                                    <div class="toggle-thumb">
+                                        <span class="material-symbols-rounded icon-secure"
+                                            title="Secure Mode">encrypted</span>
+                                        <span class="material-symbols-rounded icon-fast" title="Fast Mode">bolt</span>
+                                    </div>
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- Send button: right side, grows to fill remaining space -->
+                        <button id="send-file-btn" class="btn primary giant" disabled
+                            style="flex: 1; margin-bottom: 0;">
+                            <span class="material-symbols-rounded">send</span> Send
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Send Progress UI Moved here -->
@@ -257,11 +288,14 @@
                         <div id="send-progress-fill" class="progress-fill"></div>
                     </div>
                     <div class="speed-eta-info"
-                        style="display: flex; justify-content: space-between; font-size: 0.9rem; color: #888;">
+                        style="display: flex; justify-content: space-between; font-size: 0.9rem; color: #888; align-items: center; margin-top: 8px;">
                         <span id="send-speed">0 MB/s</span>
+                        <span id="send-size-progress" style="font-weight: 500; font-size: 0.85rem; ">0.00 MB / 0.00
+                            MB</span>
                         <span id="send-eta">--:--</span>
                     </div>
-                    <div class="chart-container" style="height: 180px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(0,0,0,0.15);">
+                    <div class="chart-container"
+                        style="height: 180px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(0,0,0,0.15);">
                         <canvas id="sendSpeedChart"></canvas>
                     </div>
                     <div class="transfer-controls">
@@ -294,8 +328,7 @@
                 <div class="room-transfer-pane hidden" id="room-transfer-pane">
 
                     <!-- Secure Text Drop UI -->
-                    <div class="text-drop-container glass-panel"
-                        style="display: flex; gap: 10px; padding: 0;">
+                    <div class="text-drop-container glass-panel" style="display: flex; gap: 10px; padding: 0;">
                         <input type="text" id="textMessageInput"
                             placeholder="Type a secure message, link, or password..."
                             style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-light);" />
@@ -333,14 +366,19 @@
                                 <div id="receive-progress-fill" class="progress-fill"></div>
                             </div>
                             <div class="speed-eta-info"
-                                style="display: flex; justify-content: space-between; font-size: 0.9rem; color: #888;">
+                                style="display: flex; justify-content: space-between; font-size: 0.9rem; color: #888; align-items: center;">
                                 <span id="receive-speed">0 MB/s</span>
+                                <span id="receive-size-progress" style="font-weight: 500; font-size: 0.85rem;">0.00 MB /
+                                    0.00 MB</span>
                                 <span id="receive-eta">--:--</span>
                             </div>
-                            <div class="chart-container" style="height: 180px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(0,0,0,0.15);">
+
+
+                            <div class="chart-container"
+                                style="height: 180px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(0,0,0,0.15);">
                                 <canvas id="receiveSpeedChart"></canvas>
                             </div>
-                            
+
                             <!-- Receiver Controls -->
                             <div class="transfer-controls" style="margin-top: 16px;">
                                 <button id="receiver-skip-btn" class="btn secondary icon-btn hidden"><span
@@ -354,14 +392,18 @@
                         </div>
 
                         <!-- Decoupled Received Files List -->
-                        <div class="sent-files-dropdown hidden" id="download-list-header" style="display: flex; flex-direction: column; gap: 12px; padding: 12px;">
+                        <div class="sent-files-dropdown hidden" id="download-list-header"
+                            style="display: flex; flex-direction: column; gap: 12px; padding: 12px;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <h4 style="margin: 0; color: var(--text-primary); font-size: 1rem; font-weight: 500;">Received Files</h4>
-                                <button id="clear-downloads-btn" class="btn danger icon-btn small" title="Clear Received Files">
+                                <h4 style="margin: 0; color: var(--text-primary); font-size: 1rem; font-weight: 500;">
+                                    Received Files</h4>
+                                <button id="clear-downloads-btn" class="btn danger icon-btn small"
+                                    title="Clear Received Files">
                                     <span class="material-symbols-rounded">delete</span>
                                 </button>
                             </div>
-                            <div id="download-links-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                            <div id="download-links-container" style="display: flex; flex-direction: column; gap: 8px;">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -417,7 +459,10 @@
             </div>
 
             <div class="ios17-card ios17-card-padded">
-                <input type="text" id="modal-room-id-input" class="portal-input modal-room-passcode-input" placeholder="Passcode" maxlength="6" autocomplete="off" oninput="this.value = this.value.toUpperCase();" onkeypress="if(event.key === 'Enter') document.getElementById('modal-join-room-btn').click();" />
+                <input type="text" id="modal-room-id-input" class="portal-input modal-room-passcode-input"
+                    placeholder="Passcode" maxlength="6" autocomplete="off"
+                    oninput="this.value = this.value.toUpperCase();"
+                    onkeypress="if(event.key === 'Enter') document.getElementById('modal-join-room-btn').click();" />
             </div>
 
             <div class="ios17-row">
@@ -429,7 +474,8 @@
                 </button>
             </div>
 
-            <button class="ios17-destroy" onclick="document.getElementById('join-room-modal').classList.remove('show'); setTimeout(() => document.getElementById('join-room-modal').classList.add('hidden'), 300);">Cancel</button>
+            <button class="ios17-destroy"
+                onclick="document.getElementById('join-room-modal').classList.remove('show'); setTimeout(() => document.getElementById('join-room-modal').classList.add('hidden'), 300);">Cancel</button>
         </div>
     </div>
 
@@ -453,8 +499,8 @@
     </div>
 
 
-    
-    
+
+
     <!-- Custom Tooltip -->
     <div id="custom-tooltip" class="custom-tooltip hidden"></div>
 
@@ -512,13 +558,6 @@
         </div>
     </footer>
 
-    <script src="assets/js/peerjs.min.js"></script>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    <script src="assets/js/qrcode.min.js"></script>
-    <script src="assets/js/html5-qrcode.min.js" type="text/javascript"></script>
-    <script src="assets/js/nearby.js"></script>
-    <script src="assets/js/main.js"></script>
-    
     <!-- GLOBAL IOS MODAL -->
     <div id="global-modal-overlay" class="modal-backdrop hidden">
         <div class="modal-ios17 modal-ios17-alert">
@@ -528,7 +567,7 @@
             <div class="modal-ios17-alert-content">
                 <h3 class="ios17-title modal-ios17-alert-title" id="global-modal-title">Title</h3>
                 <p class="ios17-subtitle modal-ios17-alert-message" id="global-modal-message">Message</p>
-                
+
                 <div class="ios-modal-checkbox hidden" id="global-modal-checkbox-container">
                     <span id="global-modal-checkbox-label" style="text-align: left; flex: 1;">Checkbox</span>
                     <label class="ios-switch">
@@ -537,12 +576,50 @@
                     </label>
                 </div>
             </div>
-            
+
             <div class="ios17-row modal-ios17-alert-actions" id="global-modal-buttons" style="display: flex;">
                 <!-- Buttons dynamically inserted here -->
             </div>
         </div>
     </div>
+
+    <div id="offline-overlay" class="modal-backdrop hidden"
+        style="z-index: 99999; backdrop-filter: blur(12px); background: rgba(5, 5, 5, 0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.3s ease;">
+        <div style="text-align: center; color: white; padding: 20px; animation: popup 0.3s ease;">
+
+            <div id="offline-icon-wrapper"
+                style="background: rgba(255, 69, 58, 0.1); width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; transition: background 0.4s ease;">
+                <span id="offline-icon" class="material-symbols-rounded"
+                    style="font-size: 40px; color: #FF453A; transition: color 0.4s ease;">wifi_off</span>
+            </div>
+
+            <h2 id="offline-title"
+                style="font-family: 'Outfit', sans-serif; font-size: 1.8rem; margin-bottom: 12px; font-weight: 600; transition: color 0.4s ease;">
+                You're Offline</h2>
+
+            <p id="offline-desc"
+                style="color: var(--text-secondary); max-width: 320px; margin: 0 auto; line-height: 1.5; transition: opacity 0.4s ease;">
+                It seems your internet connection is slow or disconnected. Please check your network.
+            </p>
+
+            <p id="offline-status"
+                style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <span id="offline-spinner" class="spinner"
+                    style="border-top-color: var(--text-secondary); width: 14px; height: 14px; transition: opacity 0.3s ease;"></span>
+                <span id="offline-status-text" style="transition: color 0.4s ease;">Waiting for connection...</span>
+            </p>
+
+        </div>
+    </div>
+
+    <script src="assets/js/peerjs.min.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="assets/js/qrcode.min.js"></script>
+    <script src="assets/js/html5-qrcode.min.js" type="text/javascript"></script>
+    <script src="assets/js/nearby.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="assets/js/navbar.js"></script>
 </body>
 
 </html>

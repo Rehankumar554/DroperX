@@ -172,6 +172,10 @@ function connectMQTT() {
     });
 
     mqttClient.on('error', (err) => {
+        if (err && err.message && err.message.includes('connack timeout')) {
+            // Public MQTT brokers often timeout. Suppress this to keep console clean.
+            return; 
+        }
         console.warn("MQTT Connection Error:", err);
     });
 }
