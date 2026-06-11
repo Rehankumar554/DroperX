@@ -62,6 +62,11 @@ self.addEventListener('fetch', (event) => {
     }
 
     // Default Network-first caching strategy
+    // Ignore non-http/https requests (like chrome-extension://) to prevent Cache put errors
+    if (!event.request.url.startsWith('http')) {
+        return;
+    }
+
     event.respondWith(
         fetch(event.request)
             .then(response => {
