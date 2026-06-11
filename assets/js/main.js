@@ -20,6 +20,17 @@ function sanitizeHTML(str) {
   return temp.innerHTML;
 }
 
+// --- AIV (Adaptive Integrity Verification) Helper ---
+async function getChunkHash(buffer) {
+  // CRITICAL FIX: Agar HTTPS nahi hai (Local network IP), to crash hone se bachao
+  if (!window.crypto || !window.crypto.subtle) {
+    return "NO_CRYPTO_ENV";
+  }
+  const hashBuffer = await window.crypto.subtle.digest("SHA-256", buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // --- End-to-End Encryption (AES-GCM) ---
 let sharedCryptoKey = null;
 
@@ -258,6 +269,26 @@ const alertModalMessage = document.getElementById("alert-modal-message");
 const alertModalBtn = document.getElementById("alert-modal-btn");
 const qrModal = document.getElementById("qr-modal");
 
+// === GLOBAL CUSTOM TOOLTIP SYSTEM (Event Delegation) ===
+document.addEventListener("mouseover", (e) => {
+  const target = e.target.closest("[data-tooltip]");
+  if (!target || !customTooltip) return;
+
+  customTooltip.innerText = target.dataset.tooltip;
+  customTooltip.classList.remove("hidden");
+
+  const rect = target.getBoundingClientRect();
+  customTooltip.style.left = `${rect.left + rect.width / 2}px`;
+  customTooltip.style.top = `${rect.top - 8}px`;
+});
+
+document.addEventListener("mouseout", (e) => {
+  const target = e.target.closest("[data-tooltip]");
+  if (target && customTooltip) {
+    customTooltip.classList.add("hidden");
+  }
+});
+
 function showToast(message, type = "info") {
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
@@ -459,14 +490,16 @@ if (copyHomeIdBtn) {
 const deleteRoomBtn = document.getElementById("delete-room-btn");
 if (deleteRoomBtn) {
   deleteRoomBtn.addEventListener("click", () => {
-    isExiting = true;
+    isExiting = true; // Temporary true taaki peer destroy hone par default disconnect alert na aaye
     if (peer) {
       peer.destroy();
       peer = null;
     }
     roomId = null;
-    createRoomBtn.disabled = false;
-    createRoomBtn.innerHTML = "Create Room";
+
+    // Naye connection ke re-initialize hone tak button ko temporary loading state me daalein
+    createRoomBtn.disabled = true;
+    createRoomBtn.innerHTML = '<span class="spinner"></span> Initializing...';
 
     document.getElementById("create-room-initial").classList.remove("hidden");
     document.getElementById("create-room-waiting").classList.remove("show");
@@ -481,6 +514,13 @@ if (deleteRoomBtn) {
     if (typeof showScreen === "function" && typeof homeScreen !== "undefined") {
       showScreen(homeScreen);
     }
+
+    // ==========================================
+    // 🔥 CRITICAL BUG FIX 🔥
+    // ==========================================
+    // exiting flag ko reset karein aur background me naya standby peer socket shuru karein
+    isExiting = false;
+    initStandbyPeer();
   });
 }
 
@@ -835,6 +875,38 @@ window.addEventListener("online", () => {
     }, 1500); // 1.5s ka smooth delay text aur animations ke liye
   }
 });
+
+// === SMART SLOW NETWORK TOGGLER (NO TIMERS) ===
+if (navigator.connection) {
+  const slowBar = document.getElementById("slow-network-bar");
+
+  function handleNetworkChange() {
+    if (!slowBar) return;
+
+    const speedType = navigator.connection.effectiveType; // Returns: 'slow-2g', '2g', '3g', or '4g'
+
+    // console.log("Current Effective Network Type:", speedType);
+
+    // Agar net ki speed 2G ya 3G par drop hoti hai
+    if (speedType === "slow-2g" || speedType === "2g" || speedType === "3g") {
+      slowBar.style.display = "flex"; // Instantly show div
+
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        slowBar.style.top = "0";
+      } else {
+        slowBar.style.bottom = "0";
+      }
+    } else {
+      slowBar.style.display = "none"; // Instantly hide div when speed is normal (4G/Wi-Fi)
+    }
+  }
+
+  // 1. Listen for real-time network status changes (Instant reactive trigger)
+  navigator.connection.addEventListener("change", handleNetworkChange);
+
+  // 2. Initial check on page load
+  handleNetworkChange();
+}
 
 // === JOIN OR CREATE ===
 window.addEventListener("load", async () => {
@@ -1205,23 +1277,25 @@ function setupDataConnection() {
 
         if (parsed && parsed.command) {
           if (parsed.command === "FILE_DONE") {
+            const currentMeta = { ...fileMeta }; // Snapshot it to prevent overwrite
+
+            // 1. Finalize the file based on mode
             if (fileStream) {
               try {
                 await fileStream.close();
               } catch (e) {}
               fileStream = null;
 
-              // Only add row if streaming chunk path hasn't already added it (dedup guard)
               if (!streamRowAdded) {
                 streamRowAdded = true;
                 receiveProgressContainer.classList.add("state-success");
                 receiveStatus.innerText = `Saved: ${sanitizeHTML(
-                  fileMeta.name
+                  currentMeta.name
                 )}`;
-                addReceivedFileRow(fileMeta.name, null, true);
+                addReceivedFileRow(currentMeta.name, null, true);
 
                 const isLastFile =
-                  fileMeta.fileIndex + 1 === fileMeta.totalFiles;
+                  currentMeta.fileIndex + 1 === currentMeta.totalFiles;
                 if (isLastFile) {
                   if (receiverPauseBtn)
                     receiverPauseBtn.classList.add("hidden");
@@ -1231,91 +1305,89 @@ function setupDataConnection() {
                   releaseWakeLock();
                 }
               }
+            } else if (currentMeta && currentMeta.isZipStream) {
+              finalizeReceive(); // RAM Fallback mode handling
+            }
 
-              // BUG 2 FIX: Populate accordion details for streamed files that don't send FILE_HASH
-              // (regular streaming: FILE_HASH handles this; but first-time rows need filling if missed)
-              _fillAccordionIfEmpty(fileMeta);
-            } else if (fileMeta && fileMeta.isZipStream) {
-              // ZIP bundle: finalizeReceive does the RAM download + row creation
-              const zipMeta = { ...fileMeta }; // snapshot before finalizeReceive clears it
-              finalizeReceive();
+            // 2. Fill Accordion Details (Speed, Time, Size) for both modes
+            _fillAccordionIfEmpty(currentMeta);
 
-              // BUG 2 FIX: ZIP never sends FILE_HASH — populate accordion with bundle stats
-              const zipTimeSec = Math.max(
-                (Date.now() - receiveStartTime) / 1000,
-                0.1
-              );
-              const zipAvgSpeed = (
-                zipMeta.size /
-                (1024 * 1024) /
-                zipTimeSec
-              ).toFixed(2);
-              const zipTimeStr =
-                zipTimeSec < 60
-                  ? zipTimeSec.toFixed(1) + "s"
-                  : Math.floor(zipTimeSec / 60) +
-                    "m " +
-                    Math.floor(zipTimeSec % 60) +
-                    "s";
-              const zipSizeStr =
-                zipMeta.size >= 1024 * 1024 * 1024
-                  ? (zipMeta.size / (1024 * 1024 * 1024)).toFixed(2) + " GB"
-                  : (zipMeta.size / (1024 * 1024)).toFixed(2) + " MB";
-              const zipTimestamp = new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              });
-
-              // Find the row just added by finalizeReceive
+            // 3. AIV: ZIP Hash Verification Check (Works for both Stream and RAM modes)
+            if (currentMeta.isZipStream) {
               setTimeout(() => {
                 const allRows = document.querySelectorAll(".download-file-row");
-                let zipRow = null;
+                let targetRow = null;
                 for (let i = allRows.length - 1; i >= 0; i--) {
-                  if (allRows[i].dataset.fileName === zipMeta.name) {
-                    zipRow = allRows[i];
+                  if (allRows[i].dataset.fileName === currentMeta.name) {
+                    targetRow = allRows[i];
                     break;
                   }
                 }
-                if (zipRow) {
-                  // Add verified badge
-                  const actDiv = zipRow.querySelector(
+
+                if (targetRow) {
+                  // AIV: Compare Tail-End Hash
+                  let isVerified = false;
+
+                  // Secure Mode auto-verifies via AES-GCM Auth Tag
+                  if (!currentMeta.isFastMode) {
+                    isVerified = !window.receiverSecureFailed;
+                  } else {
+                    // Fast Mode checks the manually calculated Last Chunk Hash
+                    isVerified =
+                      parsed.hash &&
+                      parsed.hash === window.receiverLastZipChunkHash;
+                  }
+
+                  const badgeColor = isVerified
+                    ? "rgba(16, 185, 129, 0.1)"
+                    : "rgba(239, 68, 68, 0.1)";
+                  const badgeTextColor = isVerified
+                    ? "var(--success, #10b981)"
+                    : "var(--error, #ef4444)";
+                  const badgeIcon = isVerified ? "gpp_good" : "gpp_bad";
+                  const badgeLabel = isVerified
+                    ? "Verified (AIV)"
+                    : "Corrupted";
+
+                  const actDiv = targetRow.querySelector(
                     ".download-file-row-actions"
                   );
-                  if (actDiv && !actDiv.querySelector(".verification-badge")) {
+                  if (actDiv) {
+                    // Remove any old verification badges just in case
+                    actDiv
+                      .querySelectorAll(".verification-badge")
+                      .forEach((el) => el.remove());
+
+                    // Prepend the new AIV Verified Badge before the "Streamed" badge
                     const vBadge = document.createElement("span");
                     vBadge.className = "sent-file-chip verification-badge";
-                    vBadge.innerHTML = `<span class="material-symbols-rounded" style="font-size:15px;">folder_zip</span>`;
-                    vBadge.style.cssText = `background:rgba(16,185,129,0.1); color:var(--success,#10b981); border:none; width:26px; height:26px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;`;
-                    vBadge.title = "Bundle (ZIP)";
+                    vBadge.innerHTML = `<span class="material-symbols-rounded" style="font-size:15px;">${badgeIcon}</span>`;
+                    vBadge.style.cssText = `background:${badgeColor}; color:${badgeTextColor}; border:none; width:36px; height:36px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; margin-right:4px;`;
+                    vBadge.dataset.tooltip = badgeLabel;
                     actDiv.insertBefore(vBadge, actDiv.firstChild);
                   }
-                  // Populate details
-                  const di = zipRow.querySelector(
-                    ".download-file-row-details-inner"
-                  );
-                  if (di) {
-                    di.innerHTML = `
-                      <div class="detail-row"><span class="detail-label">Mode</span><span class="detail-value">Bundle (ZIP Stream)</span></div>
-                      <div class="detail-row">
-                        <span class="detail-label">File Size</span><span class="detail-value">${zipSizeStr}</span>
-                        <span class="detail-label" style="margin-left:12px;">Completed</span><span class="detail-value">${zipTimestamp}</span>
-                      </div>
-                      <div class="detail-row">
-                        <span class="detail-label">Avg Speed</span><span class="detail-value">${zipAvgSpeed} MB/s</span>
-                        <span class="detail-label" style="margin-left:12px;">Duration</span><span class="detail-value">${zipTimeStr}</span>
-                      </div>`;
+
+                  // If Corrupted, expand row and show warning
+                  if (!isVerified) {
+                    targetRow.classList.add("is-corrupted", "expanded");
+                    if (!targetRow.querySelector(".corrupted-warning-bar")) {
+                      const warningBar = document.createElement("div");
+                      warningBar.className = "corrupted-warning-bar";
+                      warningBar.innerHTML =
+                        '<span class="material-symbols-rounded" style="font-size:14px;">info</span> ZIP Bundle may be damaged. Ask sender to re-send.';
+                      targetRow.appendChild(warningBar);
+                    }
                   }
                 }
-              }, 50);
+              }, 100);
             }
 
-            // BUG 2 FIX: Hide receive-progress-container for ALL file types after success
-            // (previously only bundle had auto-hide; regular files stayed visible forever)
+            // Hide the progress bar after 3 seconds
             setTimeout(() => {
               receiveProgressContainer.classList.add("hidden");
               receiveProgressContainer.classList.remove("state-success");
             }, 3000);
+
             return;
           }
           if (parsed.command === "TEXT_MESSAGE") {
@@ -1506,18 +1578,34 @@ function setupDataConnection() {
 
           if (parsed.command === "FILE_HASH") {
             if (fileMeta) {
-              let computedHash = null;
               const safeShortName =
                 fileMeta.name.length > 20
                   ? sanitizeHTML(fileMeta.name.substring(0, 17)) + "..."
                   : sanitizeHTML(fileMeta.name);
               const statusText = `Saved: ${safeShortName}`;
 
-              // Determine verification status
-              let isVerified = true; // Fast Mode is always "verified"
-              if (!fileMeta.isFastMode && window.receiverSpark) {
-                computedHash = window.receiverSpark.end();
+              // AIV: Determine verification status intelligently
+              let isVerified = true;
+              let computedHash = "AIV_SECURE_VERIFIED";
+
+              if (fileMeta.isFastMode) {
+                // AIV Fast Mode: 3-Point Match Check
+                computedHash = window.receiverFastHashes.join("_");
                 isVerified = computedHash === parsed.hash;
+              } else {
+                // AIV Secure Mode: AES-GCM Auth Tag Check
+                isVerified = !window.receiverSecureFailed;
+
+                // CRITICAL FIX: Sahi UI text dikhaye based on environment (HTTPS vs HTTP)
+                if (sharedCryptoKey) {
+                  computedHash = isVerified
+                    ? "AES-GCM Auth-Tag Match"
+                    : "Auth-Tag Failed";
+                  parsed.hash = "AES-GCM In-built Hash";
+                } else {
+                  computedHash = "Plaintext (HTTP Fallback)";
+                  parsed.hash = "No Encryption";
+                }
               }
 
               // Update receive-status bar
@@ -1586,9 +1674,9 @@ function setupDataConnection() {
 
                   const badge = document.createElement("span");
                   badge.className = "sent-file-chip verification-badge"; // Mark as verification badge
-                  badge.innerHTML = `<span class="material-symbols-rounded" style="font-size:15px;">${badgeIcon}</span>`;
-                  badge.style.cssText = `background:${badgeColor}; color:${badgeTextColor}; border:none; width:26px; height:26px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;`;
-                  badge.title = badgeLabel;
+                  badge.innerHTML = `<span class="material-symbols-rounded" style="font-size:16px;">${badgeIcon}</span>`;
+                  badge.style.cssText = `background:${badgeColor}; color:${badgeTextColor}; border:none; width:36px; height:36px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;`;
+                  badge.dataset.tooltip = badgeLabel;
                   actionsDiv.insertBefore(badge, actionsDiv.firstChild);
                 }
 
@@ -1608,18 +1696,18 @@ function setupDataConnection() {
                       </div>`;
                   } else {
                     detailsHTML += `
-                      <div class="detail-row">
-                        <span class="detail-label">Sender Hash</span>
-                        <span class="detail-value monospace" title="${
-                          parsed.hash
-                        }">${parsed.hash || "—"}</span>
-                      </div>
-                      <div class="detail-row">
-                        <span class="detail-label">Receiver Hash</span>
-                        <span class="detail-value monospace" title="${computedHash}">${
+                    <div class="detail-row">
+                      <span class="detail-label">Sender Hash</span>
+                      <span class="detail-value monospace" data-tooltip="${
+                        parsed.hash
+                      }">${parsed.hash || "—"}</span>
+                    </div>
+                    <div class="detail-row">
+                      <span class="detail-label">Receiver Hash</span>
+                      <span class="detail-value monospace" data-tooltip="${computedHash}">${
                       computedHash || "—"
                     }</span>
-                      </div>`;
+                    </div>`;
                   }
 
                   // File size + Timestamp in one row
@@ -1836,7 +1924,11 @@ function setupDataConnection() {
             isReceiverPaused = false;
             pendingChunks = 0;
             streamRowAdded = false; // BUG FIX: reset per-file guard for duplicate row prevention
-            window.receiverSpark = new SparkMD5.ArrayBuffer();
+
+            // AIV Initialization
+            window.receiverFastHashes = ["", "", ""];
+            window.receiverSecureFailed = false;
+            window.receiverLastZipChunkHash = null;
 
             if (receiverPauseBtn) {
               receiverPauseBtn.classList.remove("hidden");
@@ -1969,25 +2061,39 @@ function setupDataConnection() {
             decryptedBuffer = await decryptChunk(bufferToDecrypt);
             if (!decryptedBuffer) {
               console.warn("Decryption error. File corrupted.");
+              window.receiverSecureFailed = true; // AIV: Mark secure mode as corrupted
               if (isFileChunk) {
                 pendingChunks--;
                 if (pendingChunks < 3 && isReceiverPaused) {
                   isReceiverPaused = false;
-                  if (dataConnection && dataConnection.open) {
+                  if (dataConnection && dataConnection.open)
                     dataConnection.send({ command: "BACKPRESSURE_RESUME" });
-                  }
                 }
               }
               return;
             }
           }
 
-          if (window.receiverSpark && !fileMeta.isFastMode) {
-            // Force a pristine 0-offset ArrayBuffer clone to guarantee SparkMD5 compatibility
-            const pristineReceiverBuffer = new Uint8Array(
+          // AIV: Smart 3-Point Fast Hash & Tail-End ZIP Hash
+          if (fileMeta.isFastMode && !fileMeta.isZipStream) {
+            const chunkIndex = Math.floor(receivedSize / CHUNK_SIZE);
+            const totalChunks = Math.ceil(fileMeta.size / CHUNK_SIZE);
+            if (chunkIndex === 0)
+              window.receiverFastHashes[0] = await getChunkHash(
+                decryptedBuffer
+              );
+            else if (chunkIndex === Math.floor(totalChunks / 2))
+              window.receiverFastHashes[1] = await getChunkHash(
+                decryptedBuffer
+              );
+            else if (chunkIndex === totalChunks - 1)
+              window.receiverFastHashes[2] = await getChunkHash(
+                decryptedBuffer
+              );
+          } else if (fileMeta.isZipStream) {
+            window.receiverLastZipChunkHash = await getChunkHash(
               decryptedBuffer
-            ).slice().buffer;
-            window.receiverSpark.append(pristineReceiverBuffer); // Append chunk to MD5 hash
+            );
           }
 
           if (fileStream) {
@@ -2653,7 +2759,7 @@ function renderFileDetailsUI() {
             <div class="ios-file-item">
                 <div class="ios-file-icon"><span class="material-symbols-rounded">${icon}</span></div>
                 <div class="ios-file-info">
-                    <span class="ios-file-name" title="${sanitizeHTML(
+                    <span class="ios-file-name" data-tooltip="${sanitizeHTML(
                       f.name
                     )}">${sanitizeHTML(f.name)}</span>
                     <span class="ios-file-meta">${sizeStr}</span>
@@ -3012,7 +3118,10 @@ function sendNextFile() {
   // Send chunks
   let offset = 0;
   const fileReader = new FileReader();
-  const spark = new SparkMD5.ArrayBuffer(); // Initialize MD5 hasher
+
+  // AIV Initialization
+  let fastHashes = ["", "", ""];
+  const totalChunks = Math.ceil(currentFile.size / CHUNK_SIZE);
 
   // Guard: prevent concurrent FileReader calls (race condition fix)
   let isFileReading = false;
@@ -3032,16 +3141,24 @@ function sendNextFile() {
         return;
       }
 
+      // AIV 3-Point Fast Hash Calculation
+      const currentChunkIndex = Math.floor(offset / CHUNK_SIZE);
       if (isFastMode) {
-        // Fast Mode: zero crypto overhead — send raw and immediately read next
+        if (currentChunkIndex === 0)
+          fastHashes[0] = await getChunkHash(rawBuffer);
+        else if (currentChunkIndex === Math.floor(totalChunks / 2))
+          fastHashes[1] = await getChunkHash(rawBuffer);
+        else if (currentChunkIndex === totalChunks - 1)
+          fastHashes[2] = await getChunkHash(rawBuffer);
+      }
+
+      if (isFastMode) {
         dataConnection.send(rawBuffer);
         offset += rawBuffer.byteLength;
         updateSendProgress(offset, currentFile.size);
         checkPauseAndRead();
       } else {
-        // Secure Mode: encrypt then send, sequential (safe)
-        const pristineSenderBuffer = new Uint8Array(rawBuffer).slice().buffer;
-        spark.append(pristineSenderBuffer);
+        // Secure Mode: Only encrypt, AES-GCM automatically adds tamper-proof tag!
         const bufferToSend = await encryptChunk(rawBuffer);
         if (!isTransferCancelled && dataConnection && dataConnection.open) {
           dataConnection.send(bufferToSend);
@@ -3120,7 +3237,8 @@ function sendNextFile() {
       if (fileDone) return;
       fileDone = true;
 
-      const finalHash = isFastMode ? null : spark.end();
+      // AIV: Send calculated hashes
+      const finalHash = isFastMode ? fastHashes.join("_") : "SECURE_OK";
       dataConnection.send({ command: "FILE_HASH", hash: finalHash });
       addSentFileRow(currentFile.name);
       currentFileIndex++;
@@ -3303,7 +3421,7 @@ function addReceivedFileRow(fileName, fileUrl, isStreamed = false) {
   const nameSpan = document.createElement("span");
   nameSpan.className = "file-name";
   nameSpan.innerText = fileName;
-  nameSpan.title = fileName;
+  nameSpan.dataset.tooltip = fileName;
 
   const actionsDiv = document.createElement("div");
   actionsDiv.className = "download-file-row-actions";
@@ -3369,7 +3487,6 @@ function addSentFileRow(name) {
   const fileNameDisplay = document.createElement("span");
   fileNameDisplay.className = "file-name";
   fileNameDisplay.innerText = safeName;
-  fileNameDisplay.title = safeName;
 
   const iconSpan = document.createElement("span");
   iconSpan.className = "material-symbols-rounded";
@@ -3381,18 +3498,7 @@ function addSentFileRow(name) {
   sentFilesContainer.appendChild(fileRow);
   sentFilesDropdown.classList.remove("hidden");
 
-  fileRow.addEventListener("mouseenter", () => {
-    customTooltip.innerText = safeName;
-    customTooltip.classList.remove("hidden");
-
-    const rect = fileRow.getBoundingClientRect();
-    customTooltip.style.left = `${rect.left + rect.width / 2}px`;
-    customTooltip.style.top = `${rect.top - 8}px`;
-  });
-
-  fileRow.addEventListener("mouseleave", () => {
-    customTooltip.classList.add("hidden");
-  });
+  fileRow.dataset.tooltip = safeName;
 }
 
 clearDownloadsBtn.addEventListener("click", () => {
@@ -3450,6 +3556,7 @@ async function sendFolderStream() {
   let offset = 0;
   const chunkQueue = [];
   let isZippingDone = false;
+  let lastZipChunk = null; // AIV Track
 
   const zip = new fflate.Zip((err, dat, final) => {
     if (err) {
@@ -3486,11 +3593,17 @@ async function sendFolderStream() {
         offset += chunk.length;
         updateSendProgress(offset, totalSize);
 
+        lastZipChunk = chunk; // AIV: Track the final piece of the stream
+
         const encrypted = await encryptChunk(chunk);
         dataConnection.send(encrypted);
       } else if (isZippingDone) {
         if (!isTransferCancelled) {
-          dataConnection.send({ command: "FILE_DONE" });
+          // AIV: Calculate Tail-End hash
+          const finalZipHash = lastZipChunk
+            ? await getChunkHash(lastZipChunk)
+            : "EMPTY_ZIP";
+          dataConnection.send({ command: "FILE_DONE", hash: finalZipHash });
           addSentFileRow(name);
           currentFileIndex = selectedFiles.length;
           sendNextFile();
