@@ -20,11 +20,13 @@ Files are transferred directly between peers without ever touching a centralized
 
 ## ✨ Key Features
 
-- **Peer-to-Peer Architecture:** No middlemen, no cloud limits, just pure unthrottled speed.
-- **End-to-End Encrypted (E2EE):** All data channels are encrypted using DTLS and SRTP. Even we cannot see what you transfer.
+- **Dual Transfer Modes:** Choose between blazing-fast **Fast Mode** (DTLS-secured) or maximum-security **Secure Mode** (AES-GCM encrypted).
+- **AIV Verification:** Smart 3-Point Fast Hash verification ensures your files arrive without corruption, instantly.
+- **Offline P2P Transfers:** Transfer files directly over your local Wi-Fi or LAN without internet access using MQTT-based local discovery.
+- **Smart Bundling (Zip Streaming):** Send multiple files or entire folders, and they will be automatically bundled and streamed as a single Zip file on-the-fly.
 - **Zero Data Retention:** Data flows directly between connected devices. Once the tab is closed, the session is permanently destroyed.
 - **No File Size Limits:** Because files are never stored on a server, you can send files of any size—gigabytes or terabytes—without restrictions.
-- **Cross-Platform:** Works seamlessly across Windows, macOS, Android, and iOS directly from the browser.
+- **Cross-Platform:** Works seamlessly across Windows, macOS, Android, and iOS directly from the browser. Supports drag-and-drop.
 
 ## 🛠️ Technology Stack
 
