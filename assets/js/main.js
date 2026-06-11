@@ -893,8 +893,10 @@ if (navigator.connection) {
 
       if (window.matchMedia("(max-width: 768px)").matches) {
         slowBar.style.top = "0";
+        slowBar.style.bottom = "auto";
       } else {
         slowBar.style.bottom = "0";
+        slowBar.style.top = "auto";
       }
     } else {
       slowBar.style.display = "none"; // Instantly hide div when speed is normal (4G/Wi-Fi)
@@ -1302,6 +1304,8 @@ function setupDataConnection() {
                   if (receiverCancelBtn)
                     receiverCancelBtn.classList.add("hidden");
                   if (receiverSkipBtn) receiverSkipBtn.classList.add("hidden");
+                  triggerFeedback('success');
+                  receiveProgressFill.classList.remove("progress-pulse");
                   releaseWakeLock();
                 }
               }
@@ -1509,6 +1513,7 @@ function setupDataConnection() {
           if (parsed.command === "PAUSE_TRANSFER") {
             receiveStatus.innerText = "Transfer Paused by Sender";
             receiveProgressContainer.classList.add("state-error");
+            if (receiveProgressFill) receiveProgressFill.classList.remove("progress-pulse");
             isReceiverPaused = true;
             if (typeof receiverPauseBtn !== "undefined" && receiverPauseBtn) {
               receiverPauseBtn.innerHTML =
@@ -1522,6 +1527,7 @@ function setupDataConnection() {
               fileMeta.name
             )} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
             receiveProgressContainer.classList.remove("state-error");
+            if (receiveProgressFill) receiveProgressFill.classList.add("progress-pulse");
             isReceiverPaused = false;
             if (typeof receiverPauseBtn !== "undefined" && receiverPauseBtn) {
               receiverPauseBtn.innerHTML =
@@ -1534,6 +1540,7 @@ function setupDataConnection() {
             isPaused = true;
             sendStatus.innerText = "Paused by Receiver";
             sendProgressContainer.classList.add("state-error");
+            if (sendProgressFill) sendProgressFill.classList.remove("progress-pulse");
             if (pauseTransferBtn) {
               pauseTransferBtn.innerHTML =
                 '<span class="material-symbols-rounded">play_arrow</span> Resume';
@@ -1545,6 +1552,7 @@ function setupDataConnection() {
             isPaused = false;
             sendStatus.innerText = "Transfer Resumed...";
             sendProgressContainer.classList.remove("state-error");
+            if (sendProgressFill) sendProgressFill.classList.add("progress-pulse");
             if (pauseTransferBtn) {
               pauseTransferBtn.innerHTML =
                 '<span class="material-symbols-rounded">pause</span> Pause';
@@ -1772,6 +1780,9 @@ function setupDataConnection() {
           }
 
           if (parsed.command === "TRANSFER_ERROR") {
+            triggerFeedback('error');
+            if (sendProgressFill) sendProgressFill.classList.remove("progress-pulse");
+            if (receiveProgressFill) receiveProgressFill.classList.remove("progress-pulse");
             isTransferCancelled = true;
             if (sendProgressContainer)
               sendProgressContainer.classList.add("state-error");
@@ -1830,6 +1841,9 @@ function setupDataConnection() {
           }
 
           if (parsed.command === "CANCEL_TRANSFER") {
+            triggerFeedback('error');
+            if (sendProgressFill) sendProgressFill.classList.remove("progress-pulse");
+            if (receiveProgressFill) receiveProgressFill.classList.remove("progress-pulse");
             isTransferCancelled = true;
             if (sendProgressContainer)
               sendProgressContainer.classList.add("state-error");
@@ -1955,6 +1969,7 @@ function setupDataConnection() {
               "state-error",
               "state-success"
             );
+            receiveProgressFill.classList.add("progress-pulse");
             const safeShortName =
               fileMeta.name.length > 20
                 ? sanitizeHTML(fileMeta.name.substring(0, 17)) + "..."
@@ -2377,6 +2392,8 @@ function finalizeReceive() {
     if (receiverPauseBtn) receiverPauseBtn.classList.add("hidden");
     if (receiverCancelBtn) receiverCancelBtn.classList.add("hidden");
     if (receiverSkipBtn) receiverSkipBtn.classList.add("hidden");
+    triggerFeedback('success');
+    receiveProgressFill.classList.remove("progress-pulse");
     releaseWakeLock();
 
     // BUG 2 FIX: RAM mode me sabhi files receive hone par container hide karein
@@ -2505,6 +2522,7 @@ pauseTransferBtn.addEventListener("click", () => {
     pauseTransferBtn.innerHTML =
       '<span class="material-symbols-rounded">play_arrow</span> Resume';
     sendStatus.innerText = "Transfer Paused";
+    sendProgressFill.classList.remove("progress-pulse");
     sendProgressContainer.classList.add("state-error");
     if (dataConnection && dataConnection.open) {
       dataConnection.send(JSON.stringify({ command: "PAUSE_TRANSFER" }));
@@ -2513,6 +2531,7 @@ pauseTransferBtn.addEventListener("click", () => {
     pauseTransferBtn.innerHTML =
       '<span class="material-symbols-rounded">pause</span> Pause';
     sendStatus.innerText = "Transfer Resumed...";
+    sendProgressFill.classList.add("progress-pulse");
     sendProgressContainer.classList.remove("state-error");
     if (dataConnection && dataConnection.open) {
       dataConnection.send(JSON.stringify({ command: "RESUME_TRANSFER" }));
@@ -2625,6 +2644,7 @@ if (receiverPauseBtn) {
       receiverPauseBtn.innerHTML =
         '<span class="material-symbols-rounded">play_arrow</span> Resume';
       receiveStatus.innerText = "Transfer Paused by You";
+      receiveProgressFill.classList.remove("progress-pulse");
       receiveProgressContainer.classList.add("state-error");
       if (dataConnection && dataConnection.open) {
         dataConnection.send(JSON.stringify({ command: "RECEIVER_PAUSE" }));
@@ -2638,6 +2658,7 @@ if (receiverPauseBtn) {
         }/${fileMeta.totalFiles})`;
       } else {
         receiveStatus.innerText = "Transfer Resumed...";
+        receiveProgressFill.classList.add("progress-pulse");
       }
       receiveProgressContainer.classList.remove("state-error");
       if (dataConnection && dataConnection.open) {
@@ -3098,6 +3119,8 @@ function sendNextFile() {
     cancelTransferBtn.classList.add("hidden");
     pauseTransferBtn.classList.add("hidden");
     sendStatus.innerText = "All Files Sent Successfully!";
+    triggerFeedback('success');
+    sendProgressFill.classList.remove("progress-pulse");
     releaseWakeLock();
 
     // BUG FIX 3: Re-enable toggle immediately when transfer is done
@@ -3122,6 +3145,7 @@ function sendNextFile() {
 
   const currentFile = selectedFiles[currentFileIndex];
   sendProgressContainer.classList.remove("state-error", "state-success");
+  sendProgressFill.classList.add("progress-pulse");
   sendStatus.innerText = `Sending: ${sanitizeHTML(currentFile.name)} (${
     currentFileIndex + 1
   }/${selectedFiles.length})`;
@@ -3572,6 +3596,7 @@ async function sendFolderStream() {
   const { name, totalSize } = window.folderTransferMeta;
   sendStatus.innerText = `Zipping & Transferring Folder: ${name}`;
   sendProgressContainer.classList.remove("state-error", "state-success");
+  sendProgressFill.classList.add("progress-pulse");
 
   const metadata = {
     command: "FILE_METADATA",
@@ -3810,5 +3835,124 @@ if (clearTextBtn) {
     );
     if (receivedTextContent) receivedTextContent.innerText = "";
     if (receivedTextContainer) receivedTextContainer.classList.add("hidden");
+  });
+}
+
+// ==========================================
+// UI/UX PREMIUM ENHANCEMENTS
+// ==========================================
+
+// 1. Haptic Feedback
+window.triggerFeedback = function(type) {
+  if (!navigator.vibrate) return;
+  if (type === 'success') {
+    navigator.vibrate([200, 100, 200]);
+  } else if (type === 'error') {
+    navigator.vibrate([300]);
+  }
+};
+
+// 2. Visual Polish: CSS & Confetti
+const premiumStyle = document.createElement('style');
+premiumStyle.innerHTML = `
+  @keyframes progress-pulse-anim {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+  }
+  .progress-pulse {
+    animation: progress-pulse-anim 1.5s infinite ease-in-out !important;
+  }
+  #pwa-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    background-color: #007aff;
+    border-radius: 30px;
+    display: none;
+    align-items: center;
+    padding: 6px 6px 6px 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+  }
+  #pwa-container:hover {
+    transform: scale(1.02);
+  }
+  #pwa-install-btn {
+    background: transparent;
+    color: white;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 0;
+  }
+  #pwa-dismiss-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: background 0.2s;
+  }
+  #pwa-dismiss-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+`;
+document.head.appendChild(premiumStyle);
+
+// 3. PWA Install Button with 7-Day Cooldown
+const COOLDOWN_DAYS = 7;
+const COOLDOWN_MS = COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+const dismissedTime = localStorage.getItem('droperx_pwa_dismissed');
+
+if (!dismissedTime || (Date.now() - parseInt(dismissedTime, 10) > COOLDOWN_MS)) {
+  let deferredPrompt;
+  
+  const container = document.createElement('div');
+  container.id = 'pwa-container';
+  
+  const installBtn = document.createElement('button');
+  installBtn.id = 'pwa-install-btn';
+  installBtn.innerHTML = '<span class="material-symbols-rounded" style="font-size: 20px;">download</span> Install DroperX';
+  
+  const dismissBtn = document.createElement('button');
+  dismissBtn.id = 'pwa-dismiss-btn';
+  dismissBtn.innerHTML = '<span class="material-symbols-rounded" style="font-size: 18px;">close</span>';
+  
+  container.appendChild(installBtn);
+  container.appendChild(dismissBtn);
+  document.body.appendChild(container);
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    container.style.display = 'flex';
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        container.style.display = 'none';
+      }
+      deferredPrompt = null;
+    }
+  });
+
+  dismissBtn.addEventListener('click', () => {
+    localStorage.setItem('droperx_pwa_dismissed', Date.now());
+    container.style.display = 'none';
   });
 }
