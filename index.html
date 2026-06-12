@@ -190,7 +190,15 @@
                     <span class="material-symbols-rounded portal-icon">login</span>
                     <div class="portal-title">JOIN</div>
                 </div>
+
+                <!-- Drag Overlay UI (Hidden by default) -->
+                <div class="portal-drag-overlay">
+                    <span class="material-symbols-rounded" style="font-size: 48px; margin-bottom: 15px; color: var(--accent);">cloud_upload</span>
+                    <div style="font-size: 1.2rem; font-weight: bold; color: var(--accent);">Drop to Create Room</div>
+                    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 5px;">Release to instantly share these files</div>
+                </div>
             </div>
+            <p id="home-drop-instruction" style="text-align: center; color: var(--text-secondary); font-size: 0.9rem; margin-top: 15px; user-select: none;">Or drag & drop files here to create a room</p>
 
             <!-- Nearby Devices Stack (Haptic Cards) -->
             <div class="nearby-stack-container" id="nearby-devices-container">

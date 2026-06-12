@@ -1551,6 +1551,40 @@ input[type="file"] {
   position: relative;
 }
 
+.portal-container.drag-active {
+  border: 2px dashed var(--accent);
+  border-radius: 20px;
+  background-color: rgba(0, 255, 204, 0.05);
+  transform: scale(1.02);
+  transition: all 0.3s ease;
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.2);
+}
+.portal-container.drag-active > * {
+  pointer-events: none;
+}
+.portal-container.drag-active .portal-side,
+.portal-container.drag-active .portal-line {
+  opacity: 0 !important;
+  transform: scale(0.95);
+  transition: all 0.3s ease;
+}
+.portal-drag-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s ease;
+  transform: scale(0.9);
+}
+.portal-container.drag-active .portal-drag-overlay {
+  opacity: 1;
+  transform: scale(1);
+}
+
 .portal-line {
   flex-shrink: 0;
   width: 2px;

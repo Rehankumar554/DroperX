@@ -1,6 +1,6 @@
 // ==========================================
-// CONSOLE SILENCER (For Production/Clean Console)
-// Comment out the function call below to re-enable console logs
+// SMART CONSOLE SILENCER
+// Auto-disables logs in production, keeps them enabled on localhost
 // ==========================================
 function disableConsoleLogs() {
   console.log = function () {};
@@ -9,7 +9,15 @@ function disableConsoleLogs() {
   console.info = function () {};
   console.debug = function () {};
 }
-// disableConsoleLogs();
+
+// Check if the environment is NOT localhost or local IP
+const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+if (!isLocalhost) {
+  disableConsoleLogs();
+} else {
+  console.log("🛠️ Development mode detected: Console logs are ENABLED.");
+}
 // ==========================================
 
 // SECURITY: Sanitize inputs to prevent XSS (Cross-Site Scripting)
@@ -898,6 +906,8 @@ if (navigator.connection) {
         slowBar.style.bottom = "0";
         slowBar.style.top = "auto";
       }
+    } else if (speedType === "4g") {
+      slowBar.style.display = "none";
     } else {
       slowBar.style.display = "none"; // Instantly hide div when speed is normal (4G/Wi-Fi)
     }
@@ -1304,7 +1314,7 @@ function setupDataConnection() {
                   if (receiverCancelBtn)
                     receiverCancelBtn.classList.add("hidden");
                   if (receiverSkipBtn) receiverSkipBtn.classList.add("hidden");
-                  triggerFeedback('success');
+                  triggerFeedback("success");
                   receiveProgressFill.classList.remove("progress-pulse");
                   releaseWakeLock();
                 }
@@ -1513,7 +1523,8 @@ function setupDataConnection() {
           if (parsed.command === "PAUSE_TRANSFER") {
             receiveStatus.innerText = "Transfer Paused by Sender";
             receiveProgressContainer.classList.add("state-error");
-            if (receiveProgressFill) receiveProgressFill.classList.remove("progress-pulse");
+            if (receiveProgressFill)
+              receiveProgressFill.classList.remove("progress-pulse");
             isReceiverPaused = true;
             if (typeof receiverPauseBtn !== "undefined" && receiverPauseBtn) {
               receiverPauseBtn.innerHTML =
@@ -1527,7 +1538,8 @@ function setupDataConnection() {
               fileMeta.name
             )} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
             receiveProgressContainer.classList.remove("state-error");
-            if (receiveProgressFill) receiveProgressFill.classList.add("progress-pulse");
+            if (receiveProgressFill)
+              receiveProgressFill.classList.add("progress-pulse");
             isReceiverPaused = false;
             if (typeof receiverPauseBtn !== "undefined" && receiverPauseBtn) {
               receiverPauseBtn.innerHTML =
@@ -1540,7 +1552,8 @@ function setupDataConnection() {
             isPaused = true;
             sendStatus.innerText = "Paused by Receiver";
             sendProgressContainer.classList.add("state-error");
-            if (sendProgressFill) sendProgressFill.classList.remove("progress-pulse");
+            if (sendProgressFill)
+              sendProgressFill.classList.remove("progress-pulse");
             if (pauseTransferBtn) {
               pauseTransferBtn.innerHTML =
                 '<span class="material-symbols-rounded">play_arrow</span> Resume';
@@ -1552,7 +1565,8 @@ function setupDataConnection() {
             isPaused = false;
             sendStatus.innerText = "Transfer Resumed...";
             sendProgressContainer.classList.remove("state-error");
-            if (sendProgressFill) sendProgressFill.classList.add("progress-pulse");
+            if (sendProgressFill)
+              sendProgressFill.classList.add("progress-pulse");
             if (pauseTransferBtn) {
               pauseTransferBtn.innerHTML =
                 '<span class="material-symbols-rounded">pause</span> Pause';
@@ -1780,9 +1794,11 @@ function setupDataConnection() {
           }
 
           if (parsed.command === "TRANSFER_ERROR") {
-            triggerFeedback('error');
-            if (sendProgressFill) sendProgressFill.classList.remove("progress-pulse");
-            if (receiveProgressFill) receiveProgressFill.classList.remove("progress-pulse");
+            triggerFeedback("error");
+            if (sendProgressFill)
+              sendProgressFill.classList.remove("progress-pulse");
+            if (receiveProgressFill)
+              receiveProgressFill.classList.remove("progress-pulse");
             isTransferCancelled = true;
             if (sendProgressContainer)
               sendProgressContainer.classList.add("state-error");
@@ -1841,9 +1857,11 @@ function setupDataConnection() {
           }
 
           if (parsed.command === "CANCEL_TRANSFER") {
-            triggerFeedback('error');
-            if (sendProgressFill) sendProgressFill.classList.remove("progress-pulse");
-            if (receiveProgressFill) receiveProgressFill.classList.remove("progress-pulse");
+            triggerFeedback("error");
+            if (sendProgressFill)
+              sendProgressFill.classList.remove("progress-pulse");
+            if (receiveProgressFill)
+              receiveProgressFill.classList.remove("progress-pulse");
             isTransferCancelled = true;
             if (sendProgressContainer)
               sendProgressContainer.classList.add("state-error");
@@ -2031,10 +2049,14 @@ function setupDataConnection() {
                       [ts.readable, channel.port2]
                     );
                   }),
-                  new Promise((resolve) => setTimeout(() => {
-                      console.warn("StreamSaver SW timeout, proceeding anyway...");
+                  new Promise((resolve) =>
+                    setTimeout(() => {
+                      console.warn(
+                        "StreamSaver SW timeout, proceeding anyway..."
+                      );
                       resolve();
-                  }, 3000))
+                    }, 3000)
+                  ),
                 ]);
 
                 // Now ACCEPT_FILE is sent synchronously inside the queue chain
@@ -2092,7 +2114,9 @@ function setupDataConnection() {
               // Try to decrypt. If AES-GCM fails, it will THROW an error.
               decryptedBuffer = await decryptChunk(bufferToDecrypt);
             } catch (err) {
-              console.warn("AES-GCM Auth Tag validation failed. File corrupted.");
+              console.warn(
+                "AES-GCM Auth Tag validation failed. File corrupted."
+              );
               decryptedBuffer = null; // Force the fallback block to trigger
             }
 
@@ -2392,7 +2416,7 @@ function finalizeReceive() {
     if (receiverPauseBtn) receiverPauseBtn.classList.add("hidden");
     if (receiverCancelBtn) receiverCancelBtn.classList.add("hidden");
     if (receiverSkipBtn) receiverSkipBtn.classList.add("hidden");
-    triggerFeedback('success');
+    triggerFeedback("success");
     receiveProgressFill.classList.remove("progress-pulse");
     releaseWakeLock();
 
@@ -2788,7 +2812,10 @@ window.removeSelectedFile = function (index) {
     window.folderTransferMeta = null;
   } else {
     if (window.isZippingFolder && window.folderTransferMeta) {
-      window.folderTransferMeta.totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+      window.folderTransferMeta.totalSize = selectedFiles.reduce(
+        (acc, f) => acc + f.size,
+        0
+      );
     }
     renderFileDetailsUI();
   }
@@ -2884,7 +2911,8 @@ function handleFolderSelection(filesArray) {
     // Preserve original folder name if one already exists, else create it
     if (!window.folderTransferMeta) {
       const firstFile = Array.from(filesArray)[0];
-      const firstPath = firstFile.customPath || firstFile.webkitRelativePath || "";
+      const firstPath =
+        firstFile.customPath || firstFile.webkitRelativePath || "";
       const folderName = firstPath.split("/")[0] || "Shared_Folder";
       window.folderTransferMeta = { name: `${folderName}.zip`, totalSize: 0 };
     }
@@ -3053,15 +3081,21 @@ if (dropZone) {
         });
       };
 
-      // Process all dropped root items
+      // Extract all entries synchronously first to bypass browser DataTransfer security wipe
+      let entries = [];
       for (let item of items) {
         if (item.kind === "file") {
           const entry = item.webkitGetAsEntry();
           if (entry) {
-            const parsedFiles = await readEntry(entry);
-            allFiles = allFiles.concat(parsedFiles);
+            entries.push(entry);
           }
         }
+      }
+
+      // Process them asynchronously safely
+      for (let entry of entries) {
+        const parsedFiles = await readEntry(entry);
+        allFiles = allFiles.concat(parsedFiles);
       }
 
       if (allFiles.length > 0) {
@@ -3071,6 +3105,167 @@ if (dropZone) {
         } else {
           // Only plain files were dropped
           handleFileSelection(allFiles);
+        }
+      }
+    },
+    false
+  );
+}
+
+// --- NEW Home Screen Drop to Create Room Feature ---
+const homeDropZone = document.getElementById("flip-container");
+const homeDropInstruction = document.getElementById("home-drop-instruction");
+
+if (homeDropZone) {
+  const preventDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+    homeDropZone.addEventListener(eventName, preventDrag, false);
+  });
+
+  let homeDragCounter = 0;
+
+  homeDropZone.addEventListener(
+    "dragenter",
+    (e) => {
+      homeDragCounter++;
+      homeDropZone.classList.add("drag-active");
+      if (homeDropInstruction) {
+        homeDropInstruction.innerText = "Drop files to instantly create room!";
+        homeDropInstruction.style.color = "var(--accent)";
+        homeDropInstruction.style.fontWeight = "bold";
+      }
+    },
+    false
+  );
+
+  homeDropZone.addEventListener(
+    "dragover",
+    (e) => {
+      homeDropZone.classList.add("drag-active");
+    },
+    false
+  );
+
+  homeDropZone.addEventListener(
+    "dragleave",
+    (e) => {
+      homeDragCounter--;
+      if (homeDragCounter <= 0) {
+        homeDragCounter = 0;
+        homeDropZone.classList.remove("drag-active");
+        if (homeDropInstruction) {
+          homeDropInstruction.innerText =
+            "Or drag & drop files here to create a room";
+          homeDropInstruction.style.color = "var(--text-secondary)";
+          homeDropInstruction.style.fontWeight = "normal";
+        }
+      }
+    },
+    false
+  );
+
+  homeDropZone.addEventListener(
+    "drop",
+    (e) => {
+      homeDragCounter = 0;
+      homeDropZone.classList.remove("drag-active");
+      if (homeDropInstruction) {
+        homeDropInstruction.innerText =
+          "Or drag & drop files here to create a room";
+        homeDropInstruction.style.color = "var(--text-secondary)";
+        homeDropInstruction.style.fontWeight = "normal";
+      }
+    },
+    false
+  );
+
+  homeDropZone.addEventListener(
+    "drop",
+    async (e) => {
+      if (isTransferring) {
+        showToast(
+          "Cannot select new files while a transfer is in progress.",
+          "error"
+        );
+        return;
+      }
+
+      const dt = e.dataTransfer;
+      if (!dt.items) return;
+
+      const items = Array.from(dt.items);
+      let hasDirectory = false;
+      let allFiles = [];
+
+      // Helper to recursively read directory entries
+      const readEntry = async (entry, path = "") => {
+        return new Promise((resolve) => {
+          if (entry.isFile) {
+            entry.file((file) => {
+              file.customPath = path + file.name;
+              resolve([file]);
+            });
+          } else if (entry.isDirectory) {
+            hasDirectory = true;
+            const dirReader = entry.createReader();
+            const newPath = path + entry.name + "/";
+
+            let allEntries = [];
+            const readEntries = () => {
+              dirReader.readEntries(async (entries) => {
+                if (entries.length === 0) {
+                  let subFiles = [];
+                  for (let subEntry of allEntries) {
+                    const parsed = await readEntry(subEntry, newPath);
+                    subFiles = subFiles.concat(parsed);
+                  }
+                  resolve(subFiles);
+                } else {
+                  allEntries = allEntries.concat(entries);
+                  readEntries(); // read next batch
+                }
+              });
+            };
+            readEntries();
+          } else {
+            resolve([]); // Not a file or directory
+          }
+        });
+      };
+
+      // Extract all entries synchronously first to bypass browser DataTransfer security wipe
+      let entries = [];
+      for (let item of items) {
+        if (item.kind === "file") {
+          const entry = item.webkitGetAsEntry();
+          if (entry) {
+            entries.push(entry);
+          }
+        }
+      }
+
+      // Process them asynchronously safely
+      for (let entry of entries) {
+        const parsedFiles = await readEntry(entry);
+        allFiles = allFiles.concat(parsedFiles);
+      }
+
+      if (allFiles.length > 0) {
+        if (hasDirectory) {
+          handleFolderSelection(allFiles);
+        } else {
+          handleFileSelection(allFiles);
+        }
+
+        // Auto-create room
+        const createRoomBtn = document.getElementById("create-room-btn");
+        if (createRoomBtn) {
+          createRoomBtn.click();
+          showToast("Files queued! Room created successfully.", "success");
         }
       }
     },
@@ -3119,7 +3314,7 @@ function sendNextFile() {
     cancelTransferBtn.classList.add("hidden");
     pauseTransferBtn.classList.add("hidden");
     sendStatus.innerText = "All Files Sent Successfully!";
-    triggerFeedback('success');
+    triggerFeedback("success");
     sendProgressFill.classList.remove("progress-pulse");
     releaseWakeLock();
 
@@ -3843,17 +4038,17 @@ if (clearTextBtn) {
 // ==========================================
 
 // 1. Haptic Feedback
-window.triggerFeedback = function(type) {
+window.triggerFeedback = function (type) {
   if (!navigator.vibrate) return;
-  if (type === 'success') {
+  if (type === "success") {
     navigator.vibrate([200, 100, 200]);
-  } else if (type === 'error') {
+  } else if (type === "error") {
     navigator.vibrate([300]);
   }
 };
 
 // 2. Visual Polish: CSS & Confetti
-const premiumStyle = document.createElement('style');
+const premiumStyle = document.createElement("style");
 premiumStyle.innerHTML = `
   @keyframes progress-pulse-anim {
     0% { opacity: 1; }
@@ -3914,45 +4109,47 @@ document.head.appendChild(premiumStyle);
 // 3. PWA Install Button with 7-Day Cooldown
 const COOLDOWN_DAYS = 7;
 const COOLDOWN_MS = COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
-const dismissedTime = localStorage.getItem('droperx_pwa_dismissed');
+const dismissedTime = localStorage.getItem("droperx_pwa_dismissed");
 
-if (!dismissedTime || (Date.now() - parseInt(dismissedTime, 10) > COOLDOWN_MS)) {
+if (!dismissedTime || Date.now() - parseInt(dismissedTime, 10) > COOLDOWN_MS) {
   let deferredPrompt;
-  
-  const container = document.createElement('div');
-  container.id = 'pwa-container';
-  
-  const installBtn = document.createElement('button');
-  installBtn.id = 'pwa-install-btn';
-  installBtn.innerHTML = '<span class="material-symbols-rounded" style="font-size: 20px;">download</span> Install DroperX';
-  
-  const dismissBtn = document.createElement('button');
-  dismissBtn.id = 'pwa-dismiss-btn';
-  dismissBtn.innerHTML = '<span class="material-symbols-rounded" style="font-size: 18px;">close</span>';
-  
+
+  const container = document.createElement("div");
+  container.id = "pwa-container";
+
+  const installBtn = document.createElement("button");
+  installBtn.id = "pwa-install-btn";
+  installBtn.innerHTML =
+    '<span class="material-symbols-rounded" style="font-size: 20px;">download</span> Install DroperX';
+
+  const dismissBtn = document.createElement("button");
+  dismissBtn.id = "pwa-dismiss-btn";
+  dismissBtn.innerHTML =
+    '<span class="material-symbols-rounded" style="font-size: 18px;">close</span>';
+
   container.appendChild(installBtn);
   container.appendChild(dismissBtn);
   document.body.appendChild(container);
 
-  window.addEventListener('beforeinstallprompt', (e) => {
+  window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    container.style.display = 'flex';
+    container.style.display = "flex";
   });
 
-  installBtn.addEventListener('click', async () => {
+  installBtn.addEventListener("click", async () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        container.style.display = 'none';
+      if (outcome === "accepted") {
+        container.style.display = "none";
       }
       deferredPrompt = null;
     }
   });
 
-  dismissBtn.addEventListener('click', () => {
-    localStorage.setItem('droperx_pwa_dismissed', Date.now());
-    container.style.display = 'none';
+  dismissBtn.addEventListener("click", () => {
+    localStorage.setItem("droperx_pwa_dismissed", Date.now());
+    container.style.display = "none";
   });
 }
