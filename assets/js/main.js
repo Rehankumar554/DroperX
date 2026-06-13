@@ -11,7 +11,9 @@ function disableConsoleLogs() {
 }
 
 // Check if the environment is NOT localhost or local IP
-const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+const isLocalhost =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1";
 
 if (!isLocalhost) {
   disableConsoleLogs();
@@ -580,7 +582,7 @@ let html5QrcodeScanner = null;
 
 // 256KB chunks: best balance for WebRTC throughput on both desktop and mobile.
 // Smaller chunks (64KB) cause excessive per-chunk overhead; larger chunks risk mobile drops.
-const CHUNK_SIZE = 262144; // 256KB
+const CHUNK_SIZE = 32768; // 32KB (Golden Mean to leave headroom for AES-GCM IV and SCTP headers)
 
 // Generate a random room ID
 function generateRoomId() {
@@ -1227,26 +1229,43 @@ function setupDataConnection() {
     dataConnection.on("open", onConnectionOpen);
   }
 
-  let dataProcessingQueue = Promise.resolve();
+  // === NEW RECEIVER ARCHITECTURE (FLAT FIFO QUEUE) ===
+  let receiverIngestionQueue = [];
+  let isReceiverConsumerRunning = false;
+  let receiverIngestedBytes = 0;
 
-  dataConnection.on("data", (data) => {
-    // Any data from peer = proof of life for heartbeat watchdog
+  dataConnection.on("data", (rawData) => {
     window._hbLastPingTime = Date.now();
 
     let isFileChunk = false;
-    if (data && typeof data === "object" && !data.command) {
+    if (rawData && typeof rawData === "object" && !rawData.command) {
       if (
-        data instanceof Blob ||
-        data instanceof ArrayBuffer ||
-        data instanceof Uint8Array
+        rawData instanceof Blob ||
+        rawData instanceof ArrayBuffer ||
+        rawData instanceof Uint8Array
       ) {
         isFileChunk = true;
       }
     }
 
+    let data = rawData;
     if (isFileChunk) {
-      pendingChunks++;
-      if (pendingChunks > 10 && !isReceiverPaused) {
+      if (rawData instanceof ArrayBuffer) {
+        data = rawData.slice(0);
+      } else if (rawData instanceof Uint8Array) {
+        data = new Uint8Array(rawData).slice().buffer;
+      }
+    }
+
+    receiverIngestionQueue.push(data);
+
+    if (isFileChunk) {
+      if (data instanceof ArrayBuffer) receiverIngestedBytes += data.byteLength;
+      else if (data instanceof Uint8Array) receiverIngestedBytes += data.byteLength;
+      else if (data instanceof Blob) receiverIngestedBytes += data.size;
+
+      // 2MB strict backpressure pause threshold
+      if (receiverIngestedBytes > 2097152 && !isReceiverPaused) {
         isReceiverPaused = true;
         if (dataConnection && dataConnection.open) {
           dataConnection.send({ command: "BACKPRESSURE_PAUSE" });
@@ -1254,10 +1273,30 @@ function setupDataConnection() {
       }
     }
 
-    dataProcessingQueue = dataProcessingQueue
-      .then(async () => {
-        let parsed = null;
+    if (!isReceiverConsumerRunning) {
+      isReceiverConsumerRunning = true;
+      receiverConsumerLoop();
+    }
+  });
 
+  async function receiverConsumerLoop() {
+    try {
+      while (receiverIngestionQueue.length > 0) {
+        const data = receiverIngestionQueue.shift();
+  
+        let isFileChunk = false;
+        if (data && typeof data === "object" && !data.command) {
+          if (
+            data instanceof Blob ||
+            data instanceof ArrayBuffer ||
+            data instanceof Uint8Array
+          ) {
+            isFileChunk = true;
+          }
+        }
+  
+        let parsed = null;
+  
         if (typeof data === "string") {
           try {
             parsed = JSON.parse(data);
@@ -1265,14 +1304,14 @@ function setupDataConnection() {
             console.warn("Could not parse string data", e);
           }
         } else if (data && typeof data === "object" && data.command) {
-          parsed = data; // Already an object (PeerJS json serialization quirk)
+          parsed = data; 
         } else if (
-          data instanceof ArrayBuffer ||
-          data instanceof Uint8Array ||
-          data instanceof Blob
+          !isFileChunk &&
+          (data instanceof ArrayBuffer ||
+            data instanceof Uint8Array ||
+            data instanceof Blob)
         ) {
           try {
-            // In some browsers, strings might be wrapped in ArrayBuffer or Blob
             let text = "";
             if (data instanceof Blob) {
               text = await data.text();
@@ -1282,52 +1321,256 @@ function setupDataConnection() {
             if (text.includes('"command"')) {
               parsed = JSON.parse(text);
             }
-          } catch (e) {
-            // Not a JSON string, ignore error and treat as chunk
-          }
+          } catch (e) {}
         }
-
-        if (parsed && parsed.command) {
-          if (parsed.command === "FILE_DONE") {
-            const currentMeta = { ...fileMeta }; // Snapshot it to prevent overwrite
-
-            // 1. Finalize the file based on mode
-            if (fileStream) {
+  
+          if (parsed && parsed.command) {
+  
+            if (parsed.command === "TEXT_MESSAGE") {
+              const txtContainer = document.getElementById(
+                "received-text-container"
+              );
+              const txtContent = document.getElementById("received-text-content");
+              if (txtContainer && txtContent) {
+                txtContainer.classList.remove("hidden");
+                txtContent.innerText = parsed.text;
+              }
+              continue;
+            }
+  
+            // === HEARTBEAT HANDLERS ===
+            if (parsed.command === "PING") {
+              // Record that peer is alive and send PONG back
+              window._hbLastPingTime = Date.now();
               try {
-                await fileStream.close();
+                dataConnection.send({ command: "PONG", ts: parsed.ts });
               } catch (e) {}
-              fileStream = null;
-
-              if (!streamRowAdded) {
-                streamRowAdded = true;
-                receiveProgressContainer.classList.add("state-success");
-                receiveStatus.innerText = `Saved: ${sanitizeHTML(
-                  currentMeta.name
-                )}`;
-                addReceivedFileRow(currentMeta.name, null, true);
-
-                const isLastFile =
-                  currentMeta.fileIndex + 1 === currentMeta.totalFiles;
-                if (isLastFile) {
-                  if (receiverPauseBtn)
-                    receiverPauseBtn.classList.add("hidden");
-                  if (receiverCancelBtn)
-                    receiverCancelBtn.classList.add("hidden");
-                  if (receiverSkipBtn) receiverSkipBtn.classList.add("hidden");
-                  triggerFeedback("success");
-                  receiveProgressFill.classList.remove("progress-pulse");
-                  releaseWakeLock();
+              continue;
+            }
+  
+            if (parsed.command === "PONG") {
+              window._hbLastPongTime = Date.now();
+              continue;
+            }
+  
+            if (parsed.command === "PEER_LEAVING") {
+              // Other peer is intentionally leaving (graceful exit)
+              if (isExiting) continue;
+              isExiting = true;
+              if (typeof window._stopHeartbeat === "function")
+                window._stopHeartbeat();
+              clearAllFiles();
+              showAlert("Peer Left", "The other user has left the room.", () => {
+                if (
+                  typeof window.broadcastNearbyPresence === "function" &&
+                  window.currentRoomId
+                ) {
+                  window.broadcastNearbyPresence(window.currentRoomId, false);
+                }
+                if (dataConnection) dataConnection.close();
+                if (peer) peer.destroy();
+                window.location.href = window.location.href.split("?")[0];
+              });
+              continue;
+            }
+  
+            if (parsed.command === "CANCEL_TRANSFER") {
+              isTransferCancelled = true;
+  
+              // If we were receiving
+              if (fileMeta) {
+                receiveStatus.innerText = "Transfer Cancelled!";
+                receiveProgressContainer.classList.add("state-error");
+                if (receiverPauseBtn) receiverPauseBtn.classList.add("hidden");
+                if (receiverCancelBtn) receiverCancelBtn.classList.add("hidden");
+                if (receiverSkipBtn) receiverSkipBtn.classList.add("hidden");
+                receiveBuffer = [];
+                if (fileStream) {
+                  try {
+                    fileStream.abort();
+                  } catch (e) {}
+                  fileStream = null;
+                }
+                setTimeout(() => {
+                  receiveProgressContainer.classList.add("hidden");
+                  receiveProgressContainer.classList.remove("state-error");
+                }, 4000);
+              }
+  
+              // If we were sending
+              if (isTransferring) {
+                sendStatus.innerText = "Transfer Cancelled by Receiver!";
+                sendProgressContainer.classList.add("state-error");
+                cancelTransferBtn.classList.add("hidden");
+                pauseTransferBtn.classList.add("hidden");
+                setTimeout(() => {
+                  sendProgressContainer.classList.add("hidden");
+                  sendProgressContainer.classList.remove("state-error");
+                  sendFileBtn.disabled = true;
+                  document.getElementById("file-selection-form").reset();
+                  fileDetails.innerText = "";
+                  selectedFiles = [];
+                  window.isZippingFolder = false;
+                  window.folderTransferMeta = null;
+                  isTransferring = false;
+                  // BUG 1 FIX: Re-enable toggle when sender receives cancel from receiver
+                  if (transferModeToggle) transferModeToggle.disabled = false;
+                }, 3000);
+              }
+              continue;
+            }
+  
+            if (parsed.command === "SKIP_CURRENT_FILE") {
+              if (isTransferring) {
+                // Sender is notified that Receiver skipped
+                isCurrentFileSkipped = true;
+                sendStatus.innerText = "File Skipped by Receiver!";
+                sendProgressContainer.classList.add("state-error");
+              } else {
+                // Receiver is notified that Sender skipped
+                receiveStatus.innerText = "File Skipped by Sender!";
+                receiveProgressContainer.classList.add("state-error");
+                receiveBuffer = [];
+                if (fileStream) {
+                  try {
+                    fileStream.abort();
+                  } catch (e) {}
+                  fileStream = null;
+                }
+                fileMeta = null; // Drop subsequent chunks for this file
+              }
+              continue;
+            }
+  
+            if (parsed.command === "PAUSE_TRANSFER") {
+              receiveStatus.innerText = "Transfer Paused by Sender";
+              receiveProgressContainer.classList.add("state-error");
+              if (receiveProgressFill)
+                receiveProgressFill.classList.remove("progress-pulse");
+              isReceiverPaused = true;
+              if (typeof receiverPauseBtn !== "undefined" && receiverPauseBtn) {
+                receiverPauseBtn.innerHTML =
+                  '<span class="material-symbols-rounded">play_arrow</span> Resume';
+              }
+              continue;
+            }
+  
+            if (parsed.command === "RESUME_TRANSFER") {
+              receiveStatus.innerText = `Receiving: ${sanitizeHTML(
+                fileMeta.name
+              )} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
+              receiveProgressContainer.classList.remove("state-error");
+              if (receiveProgressFill)
+                receiveProgressFill.classList.add("progress-pulse");
+              isReceiverPaused = false;
+              if (typeof receiverPauseBtn !== "undefined" && receiverPauseBtn) {
+                receiverPauseBtn.innerHTML =
+                  '<span class="material-symbols-rounded">pause</span> Pause';
+              }
+              continue;
+            }
+  
+            if (parsed.command === "RECEIVER_PAUSE") {
+              isPaused = true;
+              sendStatus.innerText = "Paused by Receiver";
+              sendProgressContainer.classList.add("state-error");
+              if (sendProgressFill)
+                sendProgressFill.classList.remove("progress-pulse");
+              if (pauseTransferBtn) {
+                pauseTransferBtn.innerHTML =
+                  '<span class="material-symbols-rounded">play_arrow</span> Resume';
+              }
+              continue;
+            }
+  
+            if (parsed.command === "RECEIVER_RESUME") {
+              isPaused = false;
+              sendStatus.innerText = "Transfer Resumed...";
+              sendProgressContainer.classList.remove("state-error");
+              if (sendProgressFill)
+                sendProgressFill.classList.add("progress-pulse");
+              if (pauseTransferBtn) {
+                pauseTransferBtn.innerHTML =
+                  '<span class="material-symbols-rounded">pause</span> Pause';
+              }
+  
+              // BUG FIX 1: (Handled natively by the new async loop polling)
+  
+              // Revert to Sending after 2s
+              setTimeout(() => {
+                if (
+                  !isPaused &&
+                  !isTransferCancelled &&
+                  isTransferring &&
+                  selectedFiles &&
+                  selectedFiles.length > 0
+                ) {
+                  const currentFile = selectedFiles[currentFileIndex];
+                  if (currentFile) {
+                    sendStatus.innerText = `Sending: ${sanitizeHTML(
+                      currentFile.name
+                    )} (${currentFileIndex + 1}/${selectedFiles.length})`;
+                  }
+                }
+              }, 2000);
+  
+              continue;
+            }
+  
+            if (parsed.command === "FILE_DONE") {
+              const currentMeta = { ...fileMeta }; // Snapshot it to prevent overwrite
+  
+              // 1. Finalize the file based on mode
+              if (fileStream) {
+                try {
+                  await fileStream.close();
+                } catch (e) {}
+                fileStream = null;
+  
+                if (!streamRowAdded) {
+                  streamRowAdded = true;
+                  receiveProgressContainer.classList.add("state-success");
+                  receiveStatus.innerText = `Saved: ${sanitizeHTML(currentMeta.name)}`;
+                  addReceivedFileRow(currentMeta.name, null, true);
+  
+                  const isLastFile = currentMeta.fileIndex + 1 === currentMeta.totalFiles;
+                  if (isLastFile) {
+                    if (receiverPauseBtn) receiverPauseBtn.classList.add("hidden");
+                    if (receiverCancelBtn) receiverCancelBtn.classList.add("hidden");
+                    if (receiverSkipBtn) receiverSkipBtn.classList.add("hidden");
+                    triggerFeedback("success");
+                    receiveProgressFill.classList.remove("progress-pulse");
+                    releaseWakeLock();
+                  }
                 }
               }
-            } else if (currentMeta && currentMeta.isZipStream) {
-              finalizeReceive(); // RAM Fallback mode handling
-            }
-
-            // 2. Fill Accordion Details (Speed, Time, Size) for both modes
-            _fillAccordionIfEmpty(currentMeta);
-
-            // 3. AIV: ZIP Hash Verification Check (Works for both Stream and RAM modes)
-            if (currentMeta.isZipStream) {
+  
+              // Calculate Verification
+              let isVerified = false;
+              let computedHash = "AIV_SECURE_VERIFIED";
+              let senderHash = parsed.hash || "—";
+  
+              if (currentMeta.isFastMode && !currentMeta.isZipStream) {
+                computedHash = window.receiverFastHashes.join("_");
+                isVerified = computedHash === parsed.hash;
+              } else if (currentMeta.isZipStream) {
+                isVerified = parsed.hash && parsed.hash === window.receiverLastZipChunkHash;
+                computedHash = window.receiverLastZipChunkHash;
+              } else {
+                isVerified = !window.receiverSecureFailed;
+                if (sharedCryptoKey) {
+                  computedHash = isVerified ? "AES-GCM Auth-Tag Match" : "Auth-Tag Failed";
+                  senderHash = "AES-GCM In-built Hash";
+                } else {
+                  computedHash = "Plaintext (HTTP Fallback)";
+                  senderHash = "No Encryption";
+                }
+              }
+  
+              // 2. Fill Accordion Details (Speed, Time, Size) for both modes
+              _fillAccordionIfEmpty(currentMeta, senderHash, computedHash);
+  
+              // 3. AIV: Verification Check
               setTimeout(() => {
                 const allRows = document.querySelectorAll(".download-file-row");
                 let targetRow = null;
@@ -1337,256 +1580,166 @@ function setupDataConnection() {
                     break;
                   }
                 }
-
+  
                 if (targetRow) {
-                  // AIV: Compare Tail-End Hash
-                  let isVerified = false;
-
-                  // Secure Mode auto-verifies via AES-GCM Auth Tag
-                  if (!currentMeta.isFastMode) {
-                    isVerified = !window.receiverSecureFailed;
-                  } else {
-                    // Fast Mode checks the manually calculated Last Chunk Hash
-                    isVerified =
-                      parsed.hash &&
-                      parsed.hash === window.receiverLastZipChunkHash;
-                  }
-
-                  const badgeColor = isVerified
-                    ? "rgba(16, 185, 129, 0.1)"
-                    : "rgba(239, 68, 68, 0.1)";
-                  const badgeTextColor = isVerified
-                    ? "var(--success, #10b981)"
-                    : "var(--error, #ef4444)";
+                  const badgeColor = isVerified ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)";
+                  const badgeTextColor = isVerified ? "var(--success, #10b981)" : "var(--error, #ef4444)";
                   const badgeIcon = isVerified ? "gpp_good" : "gpp_bad";
-                  const badgeLabel = isVerified
-                    ? "Verified (AIV)"
-                    : "Corrupted";
-
-                  const actDiv = targetRow.querySelector(
-                    ".download-file-row-actions"
-                  );
+                  const badgeLabel = isVerified ? "E2E Transit Verified" : "Transit Corrupted";
+                  const tooltipText = isVerified ? badgeLabel + " - Data transmitted perfectly. (Note: Browsers cannot verify post-save disk state)" : badgeLabel + " - File may be damaged. Ask the sender to re-send.";
+  
+                  const actDiv = targetRow.querySelector(".download-file-row-actions");
                   if (actDiv) {
-                    // Remove any old verification badges just in case
-                    actDiv
-                      .querySelectorAll(".verification-badge")
-                      .forEach((el) => el.remove());
-
-                    // Prepend the new AIV Verified Badge before the "Streamed" badge
+                    actDiv.querySelectorAll(".verification-badge").forEach((el) => el.remove());
                     const vBadge = document.createElement("span");
                     vBadge.className = "sent-file-chip verification-badge";
                     vBadge.innerHTML = `<span class="material-symbols-rounded" style="font-size:15px;">${badgeIcon}</span>`;
-                    vBadge.style.cssText = `background:${badgeColor}; color:${badgeTextColor}; border:none; width:36px; height:36px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; margin-right:4px;`;
-                    vBadge.dataset.tooltip = badgeLabel;
+                    vBadge.style.cssText = `background:${badgeColor}; color:${badgeTextColor}; border:none; width:32px; height:32px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; margin-right:4px; cursor:help;`;
+                    vBadge.dataset.tooltip = tooltipText;
                     actDiv.insertBefore(vBadge, actDiv.firstChild);
                   }
-
-                  // If Corrupted, expand row and show warning
+  
                   if (!isVerified) {
                     targetRow.classList.add("is-corrupted", "expanded");
                     if (!targetRow.querySelector(".corrupted-warning-bar")) {
                       const warningBar = document.createElement("div");
                       warningBar.className = "corrupted-warning-bar";
-                      warningBar.innerHTML =
-                        '<span class="material-symbols-rounded" style="font-size:14px;">info</span> ZIP Bundle may be damaged. Ask sender to re-send.';
+                      warningBar.innerHTML = '<span class="material-symbols-rounded" style="font-size:14px;">info</span> ' + tooltipText;
                       targetRow.appendChild(warningBar);
                     }
                   }
                 }
-              }, 100);
+              }, 250);
+              continue;
             }
-
-            // Hide the progress bar after 3 seconds
-            setTimeout(() => {
-              receiveProgressContainer.classList.add("hidden");
-              receiveProgressContainer.classList.remove("state-success");
-            }, 3000);
-
-            return;
-          }
-          if (parsed.command === "TEXT_MESSAGE") {
-            const txtContainer = document.getElementById(
-              "received-text-container"
-            );
-            const txtContent = document.getElementById("received-text-content");
-            if (txtContainer && txtContent) {
-              txtContainer.classList.remove("hidden");
-              txtContent.innerText = parsed.text;
-            }
-            return;
-          }
-
-          // === HEARTBEAT HANDLERS ===
-          if (parsed.command === "PING") {
-            // Record that peer is alive and send PONG back
-            window._hbLastPingTime = Date.now();
-            try {
-              dataConnection.send({ command: "PONG", ts: parsed.ts });
-            } catch (e) {}
-            return;
-          }
-
-          if (parsed.command === "PONG") {
-            window._hbLastPongTime = Date.now();
-            return;
-          }
-
-          if (parsed.command === "PEER_LEAVING") {
-            // Other peer is intentionally leaving (graceful exit)
-            if (isExiting) return;
-            isExiting = true;
-            if (typeof window._stopHeartbeat === "function")
-              window._stopHeartbeat();
-            clearAllFiles();
-            showAlert("Peer Left", "The other user has left the room.", () => {
-              if (
-                typeof window.broadcastNearbyPresence === "function" &&
-                window.currentRoomId
-              ) {
-                window.broadcastNearbyPresence(window.currentRoomId, false);
+  
+            if (parsed.command === "BACKPRESSURE_PAUSE") {
+              isBackpressurePaused = true;
+              if (sendProgressFill) {
+                sendProgressFill.style.background = "var(--warning, #f59e0b)";
               }
-              if (dataConnection) dataConnection.close();
-              if (peer) peer.destroy();
-              window.location.href = window.location.href.split("?")[0];
-            });
-            return;
-          }
-
-          if (parsed.command === "CANCEL_TRANSFER") {
-            isTransferCancelled = true;
-
-            // If we were receiving
-            if (fileMeta) {
-              receiveStatus.innerText = "Transfer Cancelled!";
-              receiveProgressContainer.classList.add("state-error");
-              if (receiverPauseBtn) receiverPauseBtn.classList.add("hidden");
-              if (receiverCancelBtn) receiverCancelBtn.classList.add("hidden");
-              if (receiverSkipBtn) receiverSkipBtn.classList.add("hidden");
-              receiveBuffer = [];
-              if (fileStream) {
-                try {
-                  fileStream.abort();
-                } catch (e) {}
-                fileStream = null;
-              }
-              setTimeout(() => {
-                receiveProgressContainer.classList.add("hidden");
-                receiveProgressContainer.classList.remove("state-error");
-              }, 4000);
+              continue;
             }
-
-            // If we were sending
-            if (isTransferring) {
-              sendStatus.innerText = "Transfer Cancelled by Receiver!";
-              sendProgressContainer.classList.add("state-error");
-              cancelTransferBtn.classList.add("hidden");
-              pauseTransferBtn.classList.add("hidden");
+  
+            if (parsed.command === "BACKPRESSURE_RESUME") {
+              isBackpressurePaused = false;
+              if (sendProgressFill) {
+                sendProgressFill.style.background = ""; // Revert to primary
+              }
+              // Loop automatically resumes via polling
+              continue;
+            }
+  
+            if (parsed.command === "TRANSFER_ERROR") {
+              triggerFeedback("error");
+              if (sendProgressFill)
+                sendProgressFill.classList.remove("progress-pulse");
+              if (receiveProgressFill)
+                receiveProgressFill.classList.remove("progress-pulse");
+              isTransferCancelled = true;
+              if (sendProgressContainer)
+                sendProgressContainer.classList.add("state-error");
+              const sendStatus = document.getElementById("send-status");
+  
+              if (parsed.reason === "DISK_FULL") {
+                if (sendStatus)
+                  sendStatus.innerText =
+                    "Transfer Failed: Receiver's disk is full";
+                if (typeof showGlobalAlert === "function") {
+                  showGlobalAlert(
+                    "Transfer Failed",
+                    "The receiver's device ran out of storage space or aborted the save."
+                  );
+                }
+              } else if (parsed.reason === "SIZE_LIMIT_EXCEEDED") {
+                if (sendStatus)
+                  sendStatus.innerText = "Transfer Failed: File too large";
+                if (typeof showGlobalAlert === "function") {
+                  showGlobalAlert(
+                    "Transfer Failed",
+                    "The receiver's device cannot handle files this large in their current browser mode (e.g., Incognito)."
+                  );
+                }
+              } else {
+                if (sendStatus)
+                  sendStatus.innerText =
+                    "Transfer Failed: " + (parsed.reason || "Unknown Error");
+                showToast(
+                  "Transfer failed: " + (parsed.reason || "Unknown Error"),
+                  "error"
+                );
+              }
+  
+              // Task 3: Release WakeLock on error
+              releaseWakeLock();
+  
               setTimeout(() => {
-                sendProgressContainer.classList.add("hidden");
-                sendProgressContainer.classList.remove("state-error");
-                sendFileBtn.disabled = true;
-                document.getElementById("file-selection-form").reset();
-                fileDetails.innerText = "";
+                if (sendProgressContainer) {
+                  sendProgressContainer.classList.add("hidden");
+                  sendProgressContainer.classList.remove("state-error");
+                }
+                if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
+                if (pauseTransferBtn) pauseTransferBtn.classList.add("hidden");
+  
+                const form = document.getElementById("file-selection-form");
+                if (form) form.reset();
+                if (fileDetails) fileDetails.innerText = "";
                 selectedFiles = [];
                 window.isZippingFolder = false;
                 window.folderTransferMeta = null;
                 isTransferring = false;
-                // BUG 1 FIX: Re-enable toggle when sender receives cancel from receiver
                 if (transferModeToggle) transferModeToggle.disabled = false;
+              }, 5000);
+              continue;
+            }
+  
+            if (parsed.command === "CANCEL_TRANSFER") {
+              triggerFeedback("error");
+              if (sendProgressFill)
+                sendProgressFill.classList.remove("progress-pulse");
+              if (receiveProgressFill)
+                receiveProgressFill.classList.remove("progress-pulse");
+              isTransferCancelled = true;
+              if (sendProgressContainer)
+                sendProgressContainer.classList.add("state-error");
+              const sendStatus = document.getElementById("send-status");
+              if (sendStatus) sendStatus.innerText = "Transfer Cancelled";
+              showToast("Transfer cancelled by receiver.", "error");
+  
+              // Task 3: Release WakeLock on cancel
+              releaseWakeLock();
+  
+              setTimeout(() => {
+                if (sendProgressContainer) {
+                  sendProgressContainer.classList.add("hidden");
+                  sendProgressContainer.classList.remove("state-error");
+                }
+                if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
+                if (pauseTransferBtn) pauseTransferBtn.classList.add("hidden");
+  
+                const form = document.getElementById("file-selection-form");
+                if (form) form.reset();
+                if (fileDetails) fileDetails.innerText = "";
+                selectedFiles = [];
+                window.isZippingFolder = false;
+                window.folderTransferMeta = null;
+                isTransferring = false;
               }, 3000);
+  
+              continue;
             }
-            return;
-          }
-
-          if (parsed.command === "SKIP_CURRENT_FILE") {
-            if (isTransferring) {
-              // Sender is notified that Receiver skipped
-              isCurrentFileSkipped = true;
-              sendStatus.innerText = "File Skipped by Receiver!";
-              sendProgressContainer.classList.add("state-error");
-            } else {
-              // Receiver is notified that Sender skipped
-              receiveStatus.innerText = "File Skipped by Sender!";
-              receiveProgressContainer.classList.add("state-error");
-              receiveBuffer = [];
-              if (fileStream) {
-                try {
-                  fileStream.abort();
-                } catch (e) {}
-                fileStream = null;
+  
+            if (parsed.command === "ACCEPT_FILE") {
+              if (parsed.supportsEncryption === false) {
+                sharedCryptoKey = null; // Downgrade to plaintext if receiver is insecure
+                console.warn(
+                  "Receiver lacks WebCrypto. Downgrading to plaintext transfer."
+                );
+              } else {
               }
-              fileMeta = null; // Drop subsequent chunks for this file
-            }
-            return;
-          }
-
-          if (parsed.command === "PAUSE_TRANSFER") {
-            receiveStatus.innerText = "Transfer Paused by Sender";
-            receiveProgressContainer.classList.add("state-error");
-            if (receiveProgressFill)
-              receiveProgressFill.classList.remove("progress-pulse");
-            isReceiverPaused = true;
-            if (typeof receiverPauseBtn !== "undefined" && receiverPauseBtn) {
-              receiverPauseBtn.innerHTML =
-                '<span class="material-symbols-rounded">play_arrow</span> Resume';
-            }
-            return;
-          }
-
-          if (parsed.command === "RESUME_TRANSFER") {
-            receiveStatus.innerText = `Receiving: ${sanitizeHTML(
-              fileMeta.name
-            )} (${fileMeta.fileIndex + 1}/${fileMeta.totalFiles})`;
-            receiveProgressContainer.classList.remove("state-error");
-            if (receiveProgressFill)
-              receiveProgressFill.classList.add("progress-pulse");
-            isReceiverPaused = false;
-            if (typeof receiverPauseBtn !== "undefined" && receiverPauseBtn) {
-              receiverPauseBtn.innerHTML =
-                '<span class="material-symbols-rounded">pause</span> Pause';
-            }
-            return;
-          }
-
-          if (parsed.command === "RECEIVER_PAUSE") {
-            isPaused = true;
-            sendStatus.innerText = "Paused by Receiver";
-            sendProgressContainer.classList.add("state-error");
-            if (sendProgressFill)
-              sendProgressFill.classList.remove("progress-pulse");
-            if (pauseTransferBtn) {
-              pauseTransferBtn.innerHTML =
-                '<span class="material-symbols-rounded">play_arrow</span> Resume';
-            }
-            return;
-          }
-
-          if (parsed.command === "RECEIVER_RESUME") {
-            isPaused = false;
-            sendStatus.innerText = "Transfer Resumed...";
-            sendProgressContainer.classList.remove("state-error");
-            if (sendProgressFill)
-              sendProgressFill.classList.add("progress-pulse");
-            if (pauseTransferBtn) {
-              pauseTransferBtn.innerHTML =
-                '<span class="material-symbols-rounded">pause</span> Pause';
-            }
-
-            // BUG FIX 1: Restart the sender's reading loop which had halted on pause.
-            // The loop exits via `return` when paused — we must re-kick it.
-            if (typeof window._resumeCheckPauseAndRead === "function") {
-              window._resumeCheckPauseAndRead();
-            }
-
-            // Revert to Sending after 2s
-            setTimeout(() => {
-              if (
-                !isPaused &&
-                !isTransferCancelled &&
-                isTransferring &&
-                selectedFiles &&
-                selectedFiles.length > 0
-              ) {
+              isWaitingForAccept = false;
+              // Sender loop resumes automatically
+              if (selectedFiles && selectedFiles.length > 0) {
                 const currentFile = selectedFiles[currentFileIndex];
                 if (currentFile) {
                   sendStatus.innerText = `Sending: ${sanitizeHTML(
@@ -1594,669 +1747,466 @@ function setupDataConnection() {
                   )} (${currentFileIndex + 1}/${selectedFiles.length})`;
                 }
               }
-            }, 2000);
+              continue;
+            }
+  
+            if (parsed.command === "FILE_METADATA") {
+              // Task 6: Filename XSS / Path Traversal Injection Fix
+              parsed.name = parsed.name.replace(/[^a-zA-Z0-9.\-_ ]/g, "");
+              if (!parsed.name || parsed.name.trim() === "")
+                parsed.name = "unnamed_file";
+  
+              fileMeta = parsed;
+  
+              const isLargeFile = fileMeta.size > 100 * 1024 * 1024;
+              const canUseNativeFSA = !!window.showDirectoryPicker;
+              
+              let useStreamSaver =
+                isLargeFile &&
+                navigator.serviceWorker &&
+                window.TransformStream &&
+                window.WritableStream &&
+                window.ReadableStream;
+                
+              let useNativeFSA = false;
 
-            return;
-          }
-
-          if (parsed.command === "FILE_HASH") {
-            if (fileMeta) {
+              if (isLargeFile && canUseNativeFSA) {
+                if (!window.nativeDirectoryHandle) {
+                  // Prompt user for directory
+                  await new Promise((resolve) => {
+                    showGlobalModal({
+                      title: "Large File Transfer",
+                      message: `You are receiving a very large file (${(fileMeta.size / 1024 / 1024).toFixed(2)} MB). Please select a folder where this and any following files will be saved securely.<br><br>This bypasses browser limits and prevents corruption.`,
+                      buttons: [
+                        {
+                          text: "Select Save Folder",
+                          role: "bold",
+                          onClick: async () => {
+                            try {
+                              window.nativeDirectoryHandle = await window.showDirectoryPicker({
+                                id: 'droperx-transfer',
+                                mode: 'readwrite'
+                              });
+                              useNativeFSA = true;
+                              useStreamSaver = false;
+                              window.receiverUsedStream = true;
+                            } catch (e) {
+                              console.warn("User cancelled directory picker or it failed", e);
+                            }
+                            resolve();
+                          }
+                        }
+                      ]
+                    });
+                  });
+                } else {
+                  useNativeFSA = true;
+                  useStreamSaver = false;
+                  window.receiverUsedStream = true;
+                }
+              }
+              if (!useStreamSaver && !useNativeFSA && fileMeta.size > 1024 * 1024 * 1024) {
+                // 1GB hard limit
+                console.warn(
+                  "Transfer rejected: File too large for RAM-fallback mode."
+                );
+                dataConnection.send({
+                  command: "TRANSFER_ERROR",
+                  reason: "SIZE_LIMIT_EXCEEDED",
+                });
+                if (typeof showGlobalAlert === "function") {
+                  showGlobalAlert(
+                    "Transfer Rejected",
+                    "The sender tried to send a file larger than 1GB, which is not supported in Incognito mode due to RAM limits."
+                  );
+                }
+                continue;
+              }
+  
+              // Task 3: Sleep Mode Drop (Wakelock API)
+              requestWakeLock();
+  
+              receiveBuffer = [];
+              receivedSize = 0;
+              isTransferCancelled = false;
+              isReceiverPaused = false;
+              pendingChunks = 0;
+              streamRowAdded = false; // BUG FIX: reset per-file guard for duplicate row prevention
+  
+              // AIV Initialization
+              window.receiverFastHashes = ["", "", ""];
+              window.receiverSecureFailed = false;
+              window.receiverLastZipChunkHash = null;
+  
+              if (receiverPauseBtn) {
+                receiverPauseBtn.classList.remove("hidden");
+                receiverPauseBtn.innerHTML =
+                  '<span class="material-symbols-rounded">pause</span> Pause';
+              }
+              if (receiverCancelBtn) receiverCancelBtn.classList.remove("hidden");
+              if (receiverSkipBtn) receiverSkipBtn.classList.remove("hidden");
+  
+              receiveStartTime = 0;
+              lastReceiveTime = 0;
+              lastReceiveBytes = 0;
+              if (receiveChart) {
+                receiveChart.data.labels = ["0s"];
+                receiveChart.data.datasets[0].data = [0];
+                receiveChart.update("none");
+              }
+  
+              receiveProgressContainer.classList.remove(
+                "hidden",
+                "state-error",
+                "state-success"
+              );
+              receiveProgressFill.classList.add("progress-pulse");
               const safeShortName =
                 fileMeta.name.length > 20
                   ? sanitizeHTML(fileMeta.name.substring(0, 17)) + "..."
                   : sanitizeHTML(fileMeta.name);
-              const statusText = `Saved: ${safeShortName}`;
-
-              // AIV: Determine verification status intelligently
-              let isVerified = true;
-              let computedHash = "AIV_SECURE_VERIFIED";
-
-              if (fileMeta.isFastMode) {
-                // AIV Fast Mode: 3-Point Match Check
-                computedHash = window.receiverFastHashes.join("_");
-                isVerified = computedHash === parsed.hash;
+              if (
+                fileMeta.isZipStream ||
+                (fileMeta.type === "application/zip" &&
+                  fileMeta.name.endsWith(".zip"))
+              ) {
+                receiveStatus.innerText = `Receiving Folder Zip: ${safeShortName}`;
               } else {
-                // AIV Secure Mode: AES-GCM Auth Tag Check
-                isVerified = !window.receiverSecureFailed;
+                receiveStatus.innerText = `Receiving: ${safeShortName} (${
+                  fileMeta.fileIndex + 1
+                }/${fileMeta.totalFiles})`;
+              }
+  
+              receiveProgressFill.style.width = "0%";
+              receiveProgressText.innerText = "0%";
+              fileStream = null;
+              streamWriteBuffer = [];
+              streamWriteBufferSize = 0;
+  
+              // AIV Initialization
+              window.receiverUsedStream = false;
+              window.nativeWriteBuffer = new Uint8Array(2 * 1024 * 1024);
+              window.nativeWriteOffset = 0;
 
-                // CRITICAL FIX: Sahi UI text dikhaye based on environment (HTTPS vs HTTP)
-                if (sharedCryptoKey) {
-                  computedHash = isVerified
-                    ? "AES-GCM Auth-Tag Match"
-                    : "Auth-Tag Failed";
-                  parsed.hash = "AES-GCM In-built Hash";
-                } else {
-                  computedHash = "Plaintext (HTTP Fallback)";
-                  parsed.hash = "No Encryption";
+              // --- NATIVE FILE SYSTEM ACCESS API ---
+              if (useNativeFSA && window.nativeDirectoryHandle) {
+                try {
+                  const fileHandle = await window.nativeDirectoryHandle.getFileHandle(fileMeta.name, { create: true });
+                  const writable = await fileHandle.createWritable();
+                  fileStream = {
+                    async write(chunk) {
+                      await writable.write(chunk);
+                    },
+                    async close() {
+                      await writable.close();
+                    },
+                    abort() {
+                      writable.abort();
+                    }
+                  };
+                } catch (err) {
+                  console.error("Native FSA failed:", err);
+                  // Fallback to StreamSaver
+                  useStreamSaver = true;
                 }
               }
 
-              // Update receive-status bar
-              const badgeColor = isVerified
-                ? "rgba(16, 185, 129, 0.1)"
-                : "rgba(239, 68, 68, 0.1)";
-              const badgeTextColor = isVerified
-                ? "var(--success, #10b981)"
-                : "var(--error, #ef4444)";
-              const badgeIcon = isVerified ? "gpp_good" : "gpp_bad";
-              const badgeLabel = isVerified ? "Verified" : "Corrupted";
-
-              receiveStatus.innerHTML = `${statusText} <span class="badge" style="background:${badgeColor}; color:${badgeTextColor}; padding: 3px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;"><span class="material-symbols-rounded" style="font-size: 16px; display: flex; align-items: center;">${badgeIcon}</span> ${badgeLabel}</span>`;
-
-              // ── Timing & size stats ──────────────────────────────────────
-              let totalTimeSec = (Date.now() - receiveStartTime) / 1000;
-              if (totalTimeSec <= 0) totalTimeSec = 0.1;
-              const avgSpeedMBps = (
-                fileMeta.size /
-                (1024 * 1024) /
-                totalTimeSec
-              ).toFixed(2);
-              const timeString =
-                totalTimeSec < 60
-                  ? totalTimeSec.toFixed(1) + "s"
-                  : Math.floor(totalTimeSec / 60) +
-                    "m " +
-                    Math.floor(totalTimeSec % 60) +
-                    "s";
-
-              // File size: show in MB or GB
-              const fileSizeStr =
-                fileMeta.size >= 1024 * 1024 * 1024
-                  ? (fileMeta.size / (1024 * 1024 * 1024)).toFixed(2) + " GB"
-                  : (fileMeta.size / (1024 * 1024)).toFixed(2) + " MB";
-
-              // Timestamp at completion
-              const now = new Date();
-              const timestamp = now.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              });
-
-              // ── Find the matching row (last match with this filename) ─────
-              const allRows = document.querySelectorAll(".download-file-row");
-              let targetRow = null;
-              for (let i = allRows.length - 1; i >= 0; i--) {
-                if (allRows[i].dataset.fileName === fileMeta.name) {
-                  targetRow = allRows[i];
-                  break;
-                }
-              }
-
-              if (targetRow) {
-                // 1. Add verification badge — dedup: remove only previous verification badges,
-                //    NOT the "Streamed" badge which should stay alongside it.
-                const actionsDiv = targetRow.querySelector(
-                  ".download-file-row-actions"
-                );
-                if (actionsDiv) {
-                  // Only remove badges we previously inserted as verification badges
-                  actionsDiv
-                    .querySelectorAll(".verification-badge")
-                    .forEach((el) => el.remove());
-
-                  const badge = document.createElement("span");
-                  badge.className = "sent-file-chip verification-badge"; // Mark as verification badge
-                  badge.innerHTML = `<span class="material-symbols-rounded" style="font-size:16px;">${badgeIcon}</span>`;
-                  badge.style.cssText = `background:${badgeColor}; color:${badgeTextColor}; border:none; width:36px; height:36px; border-radius:50%; padding:0; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;`;
-                  badge.dataset.tooltip = badgeLabel;
-                  actionsDiv.insertBefore(badge, actionsDiv.firstChild);
-                }
-
-                // 2. Populate the details panel
-                const detailsInner = targetRow.querySelector(
-                  ".download-file-row-details-inner"
-                );
-                if (detailsInner) {
-                  let detailsHTML = "";
-
-                  // Hash / Mode row(s)
-                  if (fileMeta.isFastMode) {
-                    detailsHTML += `
-                      <div class="detail-row">
-                        <span class="detail-label">Mode</span>
-                        <span class="detail-value">Fast Mode (DTLS-secured)</span>
-                      </div>`;
-                  } else {
-                    detailsHTML += `
-                    <div class="detail-row">
-                      <span class="detail-label">Sender Hash</span>
-                      <span class="detail-value monospace" data-tooltip="${
-                        parsed.hash
-                      }">${parsed.hash || "—"}</span>
-                    </div>
-                    <div class="detail-row">
-                      <span class="detail-label">Receiver Hash</span>
-                      <span class="detail-value monospace" data-tooltip="${computedHash}">${
-                      computedHash || "—"
-                    }</span>
-                    </div>`;
-                  }
-
-                  // File size + Timestamp in one row
-                  detailsHTML += `
-                    <div class="detail-row">
-                      <span class="detail-label">File Size</span>
-                      <span class="detail-value">${fileSizeStr}</span>
-                      <span class="detail-label" style="margin-left:12px;">Completed</span>
-                      <span class="detail-value">${timestamp}</span>
-                    </div>`;
-
-                  // Avg Speed + Transfer Time side-by-side in one row
-                  detailsHTML += `
-                    <div class="detail-row">
-                      <span class="detail-label">Avg Speed</span>
-                      <span class="detail-value">${avgSpeedMBps} MB/s</span>
-                      <span class="detail-label" style="margin-left:12px;">Duration</span>
-                      <span class="detail-value">${timeString}</span>
-                    </div>`;
-
-                  detailsInner.innerHTML = detailsHTML;
-                }
-
-                // 3. Corrupted: mark row, add warning bar, auto-expand
-                if (!isVerified) {
-                  targetRow.classList.add("is-corrupted", "expanded");
-                  // Only add warning bar once
-                  if (!targetRow.querySelector(".corrupted-warning-bar")) {
-                    const warningBar = document.createElement("div");
-                    warningBar.className = "corrupted-warning-bar";
-                    warningBar.innerHTML =
-                      '<span class="material-symbols-rounded" style="font-size:14px;">info</span> File may be damaged. Ask the sender to re-send.';
-                    targetRow.appendChild(warningBar);
-                  }
-                }
-              }
-            }
-            return;
-          }
-
-          if (parsed.command === "BACKPRESSURE_PAUSE") {
-            isBackpressurePaused = true;
-            if (sendProgressFill) {
-              sendProgressFill.style.background = "var(--warning, #f59e0b)";
-            }
-            return;
-          }
-
-          if (parsed.command === "BACKPRESSURE_RESUME") {
-            isBackpressurePaused = false;
-            if (sendProgressFill) {
-              sendProgressFill.style.background = ""; // Revert to primary
-            }
-            // Re-kick the sending loop if it was halted waiting for backpressure
-            if (typeof window._resumeCheckPauseAndRead === "function") {
-              const fn = window._resumeCheckPauseAndRead;
-              window._resumeCheckPauseAndRead = null;
-              fn();
-            }
-            return;
-          }
-
-          if (parsed.command === "TRANSFER_ERROR") {
-            triggerFeedback("error");
-            if (sendProgressFill)
-              sendProgressFill.classList.remove("progress-pulse");
-            if (receiveProgressFill)
-              receiveProgressFill.classList.remove("progress-pulse");
-            isTransferCancelled = true;
-            if (sendProgressContainer)
-              sendProgressContainer.classList.add("state-error");
-            const sendStatus = document.getElementById("send-status");
-
-            if (parsed.reason === "DISK_FULL") {
-              if (sendStatus)
-                sendStatus.innerText =
-                  "Transfer Failed: Receiver's disk is full";
-              if (typeof showGlobalAlert === "function") {
-                showGlobalAlert(
-                  "Transfer Failed",
-                  "The receiver's device ran out of storage space or aborted the save."
-                );
-              }
-            } else if (parsed.reason === "SIZE_LIMIT_EXCEEDED") {
-              if (sendStatus)
-                sendStatus.innerText = "Transfer Failed: File too large";
-              if (typeof showGlobalAlert === "function") {
-                showGlobalAlert(
-                  "Transfer Failed",
-                  "The receiver's device cannot handle files this large in their current browser mode (e.g., Incognito)."
-                );
-              }
-            } else {
-              if (sendStatus)
-                sendStatus.innerText =
-                  "Transfer Failed: " + (parsed.reason || "Unknown Error");
-              showToast(
-                "Transfer failed: " + (parsed.reason || "Unknown Error"),
-                "error"
-              );
-            }
-
-            // Task 3: Release WakeLock on error
-            releaseWakeLock();
-
-            setTimeout(() => {
-              if (sendProgressContainer) {
-                sendProgressContainer.classList.add("hidden");
-                sendProgressContainer.classList.remove("state-error");
-              }
-              if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
-              if (pauseTransferBtn) pauseTransferBtn.classList.add("hidden");
-
-              const form = document.getElementById("file-selection-form");
-              if (form) form.reset();
-              if (fileDetails) fileDetails.innerText = "";
-              selectedFiles = [];
-              window.isZippingFolder = false;
-              window.folderTransferMeta = null;
-              isTransferring = false;
-              if (transferModeToggle) transferModeToggle.disabled = false;
-            }, 5000);
-            return;
-          }
-
-          if (parsed.command === "CANCEL_TRANSFER") {
-            triggerFeedback("error");
-            if (sendProgressFill)
-              sendProgressFill.classList.remove("progress-pulse");
-            if (receiveProgressFill)
-              receiveProgressFill.classList.remove("progress-pulse");
-            isTransferCancelled = true;
-            if (sendProgressContainer)
-              sendProgressContainer.classList.add("state-error");
-            const sendStatus = document.getElementById("send-status");
-            if (sendStatus) sendStatus.innerText = "Transfer Cancelled";
-            showToast("Transfer cancelled by receiver.", "error");
-
-            // Task 3: Release WakeLock on cancel
-            releaseWakeLock();
-
-            setTimeout(() => {
-              if (sendProgressContainer) {
-                sendProgressContainer.classList.add("hidden");
-                sendProgressContainer.classList.remove("state-error");
-              }
-              if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
-              if (pauseTransferBtn) pauseTransferBtn.classList.add("hidden");
-
-              const form = document.getElementById("file-selection-form");
-              if (form) form.reset();
-              if (fileDetails) fileDetails.innerText = "";
-              selectedFiles = [];
-              window.isZippingFolder = false;
-              window.folderTransferMeta = null;
-              isTransferring = false;
-            }, 3000);
-
-            return;
-          }
-
-          if (parsed.command === "ACCEPT_FILE") {
-            if (parsed.supportsEncryption === false) {
-              sharedCryptoKey = null; // Downgrade to plaintext if receiver is insecure
-              console.warn(
-                "Receiver lacks WebCrypto. Downgrading to plaintext transfer."
-              );
-            } else {
-            }
-            isWaitingForAccept = false;
-            // Re-kick the sender loop that was waiting for accept signal
-            if (typeof window._resumeCheckPauseAndRead === "function") {
-              const fn = window._resumeCheckPauseAndRead;
-              window._resumeCheckPauseAndRead = null;
-              fn();
-            }
-            if (selectedFiles && selectedFiles.length > 0) {
-              const currentFile = selectedFiles[currentFileIndex];
-              if (currentFile) {
-                sendStatus.innerText = `Sending: ${sanitizeHTML(
-                  currentFile.name
-                )} (${currentFileIndex + 1}/${selectedFiles.length})`;
-              }
-            }
-            return;
-          }
-
-          if (parsed.command === "FILE_METADATA") {
-            // Task 6: Filename XSS / Path Traversal Injection Fix
-            parsed.name = parsed.name.replace(/[^a-zA-Z0-9.\-_ ]/g, "");
-            if (!parsed.name || parsed.name.trim() === "")
-              parsed.name = "unnamed_file";
-
-            fileMeta = parsed;
-
-            // Task 2: RAM Crash in Incognito Mode Fix
-            const useStreamSaver =
-              navigator.serviceWorker &&
-              window.TransformStream &&
-              window.WritableStream &&
-              window.ReadableStream;
-            if (!useStreamSaver && fileMeta.size > 1024 * 1024 * 1024) {
-              // 1GB hard limit
-              console.warn(
-                "Transfer rejected: File too large for RAM-fallback mode."
-              );
-              dataConnection.send({
-                command: "TRANSFER_ERROR",
-                reason: "SIZE_LIMIT_EXCEEDED",
-              });
-              if (typeof showGlobalAlert === "function") {
-                showGlobalAlert(
-                  "Transfer Rejected",
-                  "The sender tried to send a file larger than 1GB, which is not supported in Incognito mode due to RAM limits."
-                );
-              }
-              return;
-            }
-
-            // Task 3: Sleep Mode Drop (Wakelock API)
-            requestWakeLock();
-
-            receiveBuffer = [];
-            receivedSize = 0;
-            isTransferCancelled = false;
-            isReceiverPaused = false;
-            pendingChunks = 0;
-            streamRowAdded = false; // BUG FIX: reset per-file guard for duplicate row prevention
-
-            // AIV Initialization
-            window.receiverFastHashes = ["", "", ""];
-            window.receiverSecureFailed = false;
-            window.receiverLastZipChunkHash = null;
-
-            if (receiverPauseBtn) {
-              receiverPauseBtn.classList.remove("hidden");
-              receiverPauseBtn.innerHTML =
-                '<span class="material-symbols-rounded">pause</span> Pause';
-            }
-            if (receiverCancelBtn) receiverCancelBtn.classList.remove("hidden");
-            if (receiverSkipBtn) receiverSkipBtn.classList.remove("hidden");
-
-            receiveStartTime = 0;
-            lastReceiveTime = 0;
-            lastReceiveBytes = 0;
-            if (receiveChart) {
-              receiveChart.data.labels = ["0s"];
-              receiveChart.data.datasets[0].data = [0];
-              receiveChart.update("none");
-            }
-
-            receiveProgressContainer.classList.remove(
-              "hidden",
-              "state-error",
-              "state-success"
-            );
-            receiveProgressFill.classList.add("progress-pulse");
-            const safeShortName =
-              fileMeta.name.length > 20
-                ? sanitizeHTML(fileMeta.name.substring(0, 17)) + "..."
-                : sanitizeHTML(fileMeta.name);
-            if (
-              fileMeta.isZipStream ||
-              (fileMeta.type === "application/zip" &&
-                fileMeta.name.endsWith(".zip"))
-            ) {
-              receiveStatus.innerText = `Receiving Folder Zip: ${safeShortName}`;
-            } else {
-              receiveStatus.innerText = `Receiving: ${safeShortName} (${
-                fileMeta.fileIndex + 1
-              }/${fileMeta.totalFiles})`;
-            }
-
-            receiveProgressFill.style.width = "0%";
-            receiveProgressText.innerText = "0%";
-            fileStream = null;
-
-            // --- STREAM SAVER LOGIC ---
-            // If SW is active and TransformStream is supported, use limitless streaming
-            if (
-              navigator.serviceWorker &&
-              navigator.serviceWorker.controller &&
-              window.TransformStream
-            ) {
-              try {
-                const ts = new TransformStream();
-                fileStream = ts.writable.getWriter();
-                const uniqueId = Math.random().toString(36).substring(2);
-                const downloadUrl = `./stream-download/${uniqueId}/${encodeURIComponent(
-                  fileMeta.name
-                )}`;
-
-                // BUG FIX: Await SW READY inside the Promise chain so ACCEPT_FILE
-                // is sent before we return. This prevents the next FILE_METADATA from
-                // being processed before ACCEPT_FILE is sent (which caused small files
-                // to be dropped because sender would move to next file too fast).
-                // Wait for SW READY with a 3-second deadlock-prevention timeout
-                await Promise.race([
-                  new Promise((resolve) => {
-                    const channel = new MessageChannel();
-                    channel.port1.onmessage = (e) => {
-                      if (e.data.status === "READY") {
-                        const iframe = document.createElement("iframe");
-                        iframe.hidden = true;
-                        iframe.src = downloadUrl;
-                        document.body.appendChild(iframe);
-                        resolve();
+              // --- STREAM SAVER LOGIC (FALLBACK) ---
+              // If SW is active, use MessageChannel manual streaming (Bypasses TransformStream memory corruption bug)
+              if (useStreamSaver) {
+                window.receiverUsedStream = true;
+                try {
+                  const uniqueId = Math.random().toString(36).substring(2);
+                  const downloadUrl = `./stream-download/${uniqueId}/${encodeURIComponent(
+                    fileMeta.name
+                  )}`;
+  
+                  const channel = new MessageChannel();
+                  let unackedChunks = 0;
+                  
+                  // Custom fileStream writer with Windowed ACK backpressure
+                  fileStream = {
+                    async write(chunk) {
+                      // Windowed backpressure: Pause if more than 32 unacked chunks (~1MB-2MB)
+                      while (unackedChunks > 32) {
+                        await new Promise(r => setTimeout(r, 2));
                       }
-                    };
-                    navigator.serviceWorker.controller.postMessage(
-                      {
-                        type: "STREAM_DOWNLOAD",
-                        id: uniqueId,
-                        stream: ts.readable,
-                      },
-                      [ts.readable, channel.port2]
-                    );
-                  }),
-                  new Promise((resolve) =>
-                    setTimeout(() => {
-                      console.warn(
-                        "StreamSaver SW timeout, proceeding anyway..."
+                      unackedChunks++;
+                      channel.port1.postMessage({ type: 'WRITE', chunk: chunk });
+                    },
+                    async close() {
+                      channel.port1.postMessage({ type: 'CLOSE' });
+                    },
+                    abort() {
+                      channel.port1.postMessage({ type: 'ABORT' });
+                    }
+                  };
+  
+                  await Promise.race([
+                    new Promise((resolve) => {
+                      channel.port1.onmessage = (e) => {
+                        if (e.data.status === "READY") {
+                          const iframe = document.createElement("iframe");
+                          iframe.hidden = true;
+                          iframe.src = downloadUrl;
+                          document.body.appendChild(iframe);
+                          resolve();
+                        } else if (e.data.type === "ACK") {
+                          unackedChunks--;
+                        }
+                      };
+                      navigator.serviceWorker.controller.postMessage(
+                        {
+                          type: "STREAM_DOWNLOAD",
+                          id: uniqueId,
+                          size: fileMeta.size,
+                        },
+                        [channel.port2]
                       );
-                      resolve();
-                    }, 3000)
-                  ),
-                ]);
-
-                // Now ACCEPT_FILE is sent synchronously inside the queue chain
-                if (dataConnection && dataConnection.open) {
-                  dataConnection.send({
-                    command: "ACCEPT_FILE",
-                    supportsEncryption: sharedCryptoKey !== null,
-                  });
+                    }),
+                    new Promise((resolve) =>
+                      setTimeout(() => {
+                        console.warn("StreamSaver SW timeout, proceeding anyway...");
+                        resolve();
+                      }, 3000)
+                    ),
+                  ]);
+  
+                  // Now ACCEPT_FILE is sent synchronously inside the queue chain
+                  if (dataConnection && dataConnection.open) {
+                    dataConnection.send({
+                      command: "ACCEPT_FILE",
+                      supportsEncryption: sharedCryptoKey !== null,
+                    });
+                  }
+                  continue;
+                } catch (e) {
+                  console.warn(
+                    "StreamSaver setup failed, falling back to RAM",
+                    e
+                  );
+                  fileStream = null;
                 }
-                return;
-              } catch (e) {
-                console.warn(
-                  "StreamSaver setup failed, falling back to RAM",
-                  e
-                );
-                fileStream = null;
+              } else if (
+                window.location.protocol !== "https:" &&
+                window.location.hostname !== "localhost"
+              ) {
+                console.warn("No HTTPS detected. Falling back to RAM limit.");
               }
-            } else if (
-              window.location.protocol !== "https:" &&
-              window.location.hostname !== "localhost"
-            ) {
-              console.warn("No HTTPS detected. Falling back to RAM limit.");
+  
+              // Automatically accept the file (RAM Fallback)
+              if (dataConnection && dataConnection.open) {
+                dataConnection.send({
+                  command: "ACCEPT_FILE",
+                  supportsEncryption: sharedCryptoKey !== null,
+                });
+              }
+              continue;
             }
-
-            // Automatically accept the file (RAM Fallback)
-            if (dataConnection && dataConnection.open) {
-              dataConnection.send({
-                command: "ACCEPT_FILE",
-                supportsEncryption: sharedCryptoKey !== null,
-              });
+          } else {
+            // Must be a file chunk
+            if (isTransferCancelled) {
+              
+              continue;
             }
-            return;
-          }
-        } else {
-          // Must be a file chunk
-          if (isTransferCancelled) {
-            if (isFileChunk) pendingChunks--;
-            return;
-          }
-
-          if (!fileMeta) {
-            // Drop in-transit chunks for skipped files gracefully
-            if (isFileChunk) pendingChunks--;
-            return;
-          }
-
-          let bufferToDecrypt = data;
-          if (data instanceof Blob) {
-            bufferToDecrypt = await data.arrayBuffer();
-          }
-
-          let decryptedBuffer = bufferToDecrypt;
-          if (!fileMeta.isFastMode) {
-            try {
-              // Try to decrypt. If AES-GCM fails, it will THROW an error.
-              decryptedBuffer = await decryptChunk(bufferToDecrypt);
-            } catch (err) {
-              console.warn(
-                "AES-GCM Auth Tag validation failed. File corrupted."
+  
+            if (!fileMeta) {
+              // Drop in-transit chunks for skipped files gracefully
+              
+              continue;
+            }
+  
+            let bufferToDecrypt = data;
+            if (data instanceof Blob) {
+              bufferToDecrypt = await data.arrayBuffer();
+            }
+  
+            let decryptedBuffer = bufferToDecrypt;
+            if (!fileMeta.isFastMode) {
+              try {
+                // Try to decrypt. If AES-GCM fails, it will THROW an error.
+                decryptedBuffer = await decryptChunk(bufferToDecrypt);
+              } catch (err) {
+                console.warn(
+                  "AES-GCM Auth Tag validation failed. File corrupted."
+                );
+                decryptedBuffer = null; // Force the fallback block to trigger
+              }
+  
+              if (!decryptedBuffer) {
+                window.receiverSecureFailed = true; // AIV: Mark secure mode as corrupted
+  
+  
+                // CRITICAL FIX: Do not return. Fallback to raw buffer to keep UI and StreamSaver progressing.
+                decryptedBuffer = bufferToDecrypt;
+              }
+            }
+  
+            // AIV: Smart 3-Point Fast Hash & Tail-End ZIP Hash
+            if (fileMeta.isFastMode && !fileMeta.isZipStream) {
+              const chunkIndex = Math.floor(receivedSize / CHUNK_SIZE);
+              const totalChunks = Math.ceil(fileMeta.size / CHUNK_SIZE);
+              if (chunkIndex === 0)
+                window.receiverFastHashes[0] = await getChunkHash(
+                  decryptedBuffer
+                );
+              else if (chunkIndex === Math.floor(totalChunks / 2))
+                window.receiverFastHashes[1] = await getChunkHash(
+                  decryptedBuffer
+                );
+              else if (chunkIndex === totalChunks - 1)
+                window.receiverFastHashes[2] = await getChunkHash(
+                  decryptedBuffer
+                );
+            } else if (fileMeta.isZipStream) {
+              window.receiverLastZipChunkHash = await getChunkHash(
+                decryptedBuffer
               );
-              decryptedBuffer = null; // Force the fallback block to trigger
             }
-
-            if (!decryptedBuffer) {
-              window.receiverSecureFailed = true; // AIV: Mark secure mode as corrupted
-
-              if (isFileChunk) {
-                pendingChunks--;
+  
+            if (fileStream) {
+              try {
+                const u8 = new Uint8Array(decryptedBuffer);
+                receivedSize += u8.byteLength;
+                updateReceiveProgress(receivedSize, fileMeta.size);
+                
+                // 2MB Application-Level Write Buffering
+                // The exact 2MB buffer array is re-used to avoid V8 Garbage Collection freezes.
+                if (window.nativeWriteOffset + u8.byteLength > window.nativeWriteBuffer.byteLength) {
+                    const chunkToWrite = window.nativeWriteBuffer.subarray(0, window.nativeWriteOffset);
+                    await fileStream.write(chunkToWrite);
+                    window.nativeWriteOffset = 0;
+                }
+                
+                // Accumulate current chunk synchronously
+                window.nativeWriteBuffer.set(u8, window.nativeWriteOffset);
+                window.nativeWriteOffset += u8.byteLength;
+  
+                if (receivedSize >= fileMeta.size && !fileMeta.isZipStream) {
+                  // Final Flush before closing
+                  if (window.nativeWriteOffset > 0) {
+                      const finalChunkToWrite = window.nativeWriteBuffer.subarray(0, window.nativeWriteOffset);
+                      await fileStream.write(finalChunkToWrite);
+                      window.nativeWriteOffset = 0;
+                  }
+                  // Snapshot meta NOW before any async work or next FILE_METADATA can overwrite it
+                  const completedMeta = {
+                    name: fileMeta.name,
+                    fileIndex: fileMeta.fileIndex,
+                    totalFiles: fileMeta.totalFiles,
+                  };
+  
+                  // Add IPC Flush Delay: Strict 1000ms safety delay before closing stream for slow HDDs
+                  await new Promise(r => setTimeout(r, 1000));
+  
+                  await fileStream.close();
+                  fileStream = null;
+  
+                  if (!streamRowAdded) {
+                    streamRowAdded = true;
+                    receiveProgressContainer.classList.add("state-success");
+                    receiveStatus.innerText = `Saved: ${sanitizeHTML(
+                      completedMeta.name
+                    )}`;
+                    addReceivedFileRow(completedMeta.name, null, true);
+  
+                    if (
+                      completedMeta.fileIndex + 1 ===
+                      completedMeta.totalFiles
+                    ) {
+                      if (receiverPauseBtn)
+                        receiverPauseBtn.classList.add("hidden");
+                      if (receiverCancelBtn)
+                        receiverCancelBtn.classList.add("hidden");
+                      if (receiverSkipBtn)
+                        receiverSkipBtn.classList.add("hidden");
+                      releaseWakeLock();
+  
+                      // BUG 2 FIX: Stream saver mode me sabhi files receive hone par container hide karein
+                      setTimeout(() => {
+                        receiveProgressContainer.classList.add("hidden");
+                        receiveProgressContainer.classList.remove(
+                          "state-success"
+                        );
+                      }, 3000);
+                    }
+                  }
+                }
+              } catch (e) {
+                if (isTransferCancelled) {
+                  
+                  continue;
+                }
+                console.warn("Stream write rejected. Error:", e);
+  
+                try {
+                  fileStream.abort();
+                } catch (err) {}
+                fileStream = null;
+                isTransferCancelled = true;
+                receiveProgressContainer.classList.add("state-error");
+                receiveStatus.innerText = "Transfer Failed / Cancelled";
+  
+                // Task 1: Check for Disk Full (QuotaExceededError)
+                if (
+                  e &&
+                  (e.name === "QuotaExceededError" ||
+                    (e.message && e.message.toLowerCase().includes("quota")))
+                ) {
+                  if (dataConnection && dataConnection.open) {
+                    dataConnection.send({
+                      command: "TRANSFER_ERROR",
+                      reason: "DISK_FULL",
+                    });
+                  }
+                  if (typeof showGlobalAlert === "function") {
+                    showGlobalAlert(
+                      "Download Failed",
+                      "Failed to save the file. Your disk might be full."
+                    );
+                  }
+                } else {
+                  if (dataConnection && dataConnection.open) {
+                    dataConnection.send({ command: "CANCEL_TRANSFER" });
+                  }
+                }
+  
+                // Task 3: Release WakeLock on error
+                releaseWakeLock();
+  
+                setTimeout(() => {
+                  receiveProgressContainer.classList.add("hidden");
+                  receiveProgressContainer.classList.remove("state-error");
+                  isTransferring = false;
+                }, 3000);
+  
+                
+                continue;
+              } finally {
+                
                 if (pendingChunks < 3 && isReceiverPaused) {
                   isReceiverPaused = false;
-                  if (dataConnection && dataConnection.open)
+                  if (dataConnection && dataConnection.open) {
                     dataConnection.send({ command: "BACKPRESSURE_RESUME" });
-                }
-              }
-              // CRITICAL FIX: Do not return. Fallback to raw buffer to keep UI and StreamSaver progressing.
-              decryptedBuffer = bufferToDecrypt;
-            }
-          }
-
-          // AIV: Smart 3-Point Fast Hash & Tail-End ZIP Hash
-          if (fileMeta.isFastMode && !fileMeta.isZipStream) {
-            const chunkIndex = Math.floor(receivedSize / CHUNK_SIZE);
-            const totalChunks = Math.ceil(fileMeta.size / CHUNK_SIZE);
-            if (chunkIndex === 0)
-              window.receiverFastHashes[0] = await getChunkHash(
-                decryptedBuffer
-              );
-            else if (chunkIndex === Math.floor(totalChunks / 2))
-              window.receiverFastHashes[1] = await getChunkHash(
-                decryptedBuffer
-              );
-            else if (chunkIndex === totalChunks - 1)
-              window.receiverFastHashes[2] = await getChunkHash(
-                decryptedBuffer
-              );
-          } else if (fileMeta.isZipStream) {
-            window.receiverLastZipChunkHash = await getChunkHash(
-              decryptedBuffer
-            );
-          }
-
-          if (fileStream) {
-            try {
-              await fileStream.write(new Uint8Array(decryptedBuffer));
-              receivedSize += decryptedBuffer.byteLength;
-              updateReceiveProgress(receivedSize, fileMeta.size);
-
-              if (receivedSize >= fileMeta.size && !fileMeta.isZipStream) {
-                // Snapshot meta NOW before any async work or next FILE_METADATA can overwrite it
-                const completedMeta = {
-                  name: fileMeta.name,
-                  fileIndex: fileMeta.fileIndex,
-                  totalFiles: fileMeta.totalFiles,
-                };
-
-                await fileStream.close();
-                fileStream = null;
-
-                if (!streamRowAdded) {
-                  streamRowAdded = true;
-                  receiveProgressContainer.classList.add("state-success");
-                  receiveStatus.innerText = `Saved: ${sanitizeHTML(
-                    completedMeta.name
-                  )}`;
-                  addReceivedFileRow(completedMeta.name, null, true);
-
-                  if (
-                    completedMeta.fileIndex + 1 ===
-                    completedMeta.totalFiles
-                  ) {
-                    if (receiverPauseBtn)
-                      receiverPauseBtn.classList.add("hidden");
-                    if (receiverCancelBtn)
-                      receiverCancelBtn.classList.add("hidden");
-                    if (receiverSkipBtn)
-                      receiverSkipBtn.classList.add("hidden");
-                    releaseWakeLock();
-
-                    // BUG 2 FIX: Stream saver mode me sabhi files receive hone par container hide karein
-                    setTimeout(() => {
-                      receiveProgressContainer.classList.add("hidden");
-                      receiveProgressContainer.classList.remove(
-                        "state-success"
-                      );
-                    }, 3000);
                   }
                 }
               }
-            } catch (e) {
-              if (isTransferCancelled) {
-                if (isFileChunk) pendingChunks--;
-                return;
-              }
-              console.warn("Stream write rejected. Error:", e);
-
-              try {
-                fileStream.abort();
-              } catch (err) {}
-              fileStream = null;
-              isTransferCancelled = true;
-              receiveProgressContainer.classList.add("state-error");
-              receiveStatus.innerText = "Transfer Failed / Cancelled";
-
-              // Task 1: Check for Disk Full (QuotaExceededError)
+            } else {
+              receiveBuffer.push(decryptedBuffer);
+              receivedSize += decryptedBuffer.byteLength;
+              updateReceiveProgress(receivedSize, fileMeta.size);
+  
+              // Guard: only finalize once per file (prevents double-finalize from stale late chunks)
               if (
-                e &&
-                (e.name === "QuotaExceededError" ||
-                  (e.message && e.message.toLowerCase().includes("quota")))
+                receivedSize >= fileMeta.size &&
+                !fileMeta.isZipStream &&
+                !streamRowAdded
               ) {
-                if (dataConnection && dataConnection.open) {
-                  dataConnection.send({
-                    command: "TRANSFER_ERROR",
-                    reason: "DISK_FULL",
-                  });
-                }
-                if (typeof showGlobalAlert === "function") {
-                  showGlobalAlert(
-                    "Download Failed",
-                    "Failed to save the file. Your disk might be full."
-                  );
-                }
-              } else {
-                if (dataConnection && dataConnection.open) {
-                  dataConnection.send({ command: "CANCEL_TRANSFER" });
-                }
+                streamRowAdded = true; // Mark as finalized so no second call can slip through
+                finalizeReceive();
               }
-
-              // Task 3: Release WakeLock on error
-              releaseWakeLock();
-
-              setTimeout(() => {
-                receiveProgressContainer.classList.add("hidden");
-                receiveProgressContainer.classList.remove("state-error");
-                isTransferring = false;
-              }, 3000);
-
-              if (isFileChunk) pendingChunks--;
-              return;
-            } finally {
-              if (isFileChunk) pendingChunks--;
+  
+              
               if (pendingChunks < 3 && isReceiverPaused) {
                 isReceiverPaused = false;
                 if (dataConnection && dataConnection.open) {
@@ -2264,33 +2214,27 @@ function setupDataConnection() {
                 }
               }
             }
-          } else {
-            receiveBuffer.push(decryptedBuffer);
-            receivedSize += decryptedBuffer.byteLength;
-            updateReceiveProgress(receivedSize, fileMeta.size);
-
-            // Guard: only finalize once per file (prevents double-finalize from stale late chunks)
-            if (
-              receivedSize >= fileMeta.size &&
-              !fileMeta.isZipStream &&
-              !streamRowAdded
-            ) {
-              streamRowAdded = true; // Mark as finalized so no second call can slip through
-              finalizeReceive();
-            }
-
-            if (isFileChunk) pendingChunks--;
-            if (pendingChunks < 3 && isReceiverPaused) {
-              isReceiverPaused = false;
-              if (dataConnection && dataConnection.open) {
-                dataConnection.send({ command: "BACKPRESSURE_RESUME" });
-              }
+          }
+  
+  
+        if (isFileChunk) {
+          if (data instanceof ArrayBuffer) receiverIngestedBytes -= data.byteLength;
+          else if (data instanceof Uint8Array) receiverIngestedBytes -= data.byteLength;
+          else if (data instanceof Blob) receiverIngestedBytes -= data.size;
+          
+          if (receiverIngestedBytes < 1048576 && isReceiverPaused) {
+            isReceiverPaused = false;
+            if (dataConnection && dataConnection.open) {
+              dataConnection.send({ command: "BACKPRESSURE_RESUME" });
             }
           }
         }
-      })
-      .catch((err) => console.error("Error processing data queue:", err));
-  });
+      }
+    } finally {
+      isReceiverConsumerRunning = false;
+    }
+  }
+
 
   dataConnection.on("close", () => {
     if (isExiting) return;
@@ -2434,7 +2378,7 @@ function finalizeReceive() {
  * Used for streamed files where FILE_HASH may not arrive (e.g. zip bundles,
  * or fast-mode files where FILE_DONE is the completion signal).
  */
-function _fillAccordionIfEmpty(meta) {
+function _fillAccordionIfEmpty(meta, senderHash, receiverHash) {
   if (!meta) return;
   // BUG 1 FIX: isZipStream ko bhi capture karna
   const snapMeta = {
@@ -2484,8 +2428,23 @@ function _fillAccordionIfEmpty(meta) {
       modeDisplay = "Fast Mode (DTLS-secured)";
     }
 
+    let hashRows = "";
+    if (snapMeta.isFastMode || snapMeta.isZipStream) {
+      hashRows = `<div class="detail-row"><span class="detail-label">Mode</span><span class="detail-value">${modeDisplay}</span></div>`;
+    } else {
+      hashRows = `
+        <div class="detail-row">
+          <span class="detail-label">Sender Hash</span>
+          <span class="detail-value monospace" data-tooltip="${senderHash || "—"}">${senderHash || "—"}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Receiver Hash</span>
+          <span class="detail-value monospace" data-tooltip="${receiverHash || "—"}">${receiverHash || "—"}</span>
+        </div>`;
+    }
+
     di.innerHTML = `
-      <div class="detail-row"><span class="detail-label">Mode</span><span class="detail-value">${modeDisplay}</span></div>
+      ${hashRows}
       <div class="detail-row">
         <span class="detail-label">File Size</span><span class="detail-value">${sizeStr}</span>
         <span class="detail-label" style="margin-left:12px;">Completed</span><span class="detail-value">${ts}</span>
@@ -2539,6 +2498,10 @@ let isPaused = false;
 let isBackpressurePaused = false;
 let isWaitingForAccept = false;
 let fileStream = null;
+let streamWriteBuffer = []; // Accumulate small chunks to prevent Service Worker IPC overwhelm
+let streamWriteBufferSize = 0;
+const STREAM_FLUSH_THRESHOLD = 2 * 1024 * 1024; //  Temporary Commented for Testing do not remove this 
+// const STREAM_FLUSH_THRESHOLD = 32768;
 
 pauseTransferBtn.addEventListener("click", () => {
   isPaused = !isPaused;
@@ -2561,10 +2524,7 @@ pauseTransferBtn.addEventListener("click", () => {
       dataConnection.send(JSON.stringify({ command: "RESUME_TRANSFER" }));
     }
 
-    // BUG FIX 1: Restart the sending loop — it halted inside checkPauseAndRead on pause.
-    if (typeof window._resumeCheckPauseAndRead === "function") {
-      window._resumeCheckPauseAndRead();
-    }
+    // Sender loop resumes automatically via polling
 
     // Revert status label after 2s
     setTimeout(() => {
@@ -2627,7 +2587,7 @@ cancelTransferBtn.addEventListener("click", () => {
     isWaitingForAccept = false;
     isPaused = false;
     isTransferring = false; // Mark as not transferring immediately
-    window._resumeCheckPauseAndRead = null; // Clear resume hook
+    // (Resume hook cleared)
     cancelTransferBtn.classList.add("hidden");
     pauseTransferBtn.classList.add("hidden");
 
@@ -3311,48 +3271,45 @@ sendFileBtn.addEventListener("click", () => {
 
 function sendNextFile() {
   if (currentFileIndex >= selectedFiles.length) {
-    cancelTransferBtn.classList.add("hidden");
-    pauseTransferBtn.classList.add("hidden");
-    sendStatus.innerText = "All Files Sent Successfully!";
+    if (cancelTransferBtn) cancelTransferBtn.classList.add("hidden");
+    if (pauseTransferBtn) pauseTransferBtn.classList.add("hidden");
+    if (sendStatus) sendStatus.innerText = "All Files Sent Successfully!";
     triggerFeedback("success");
-    sendProgressFill.classList.remove("progress-pulse");
+    if (sendProgressFill) sendProgressFill.classList.remove("progress-pulse");
     releaseWakeLock();
 
-    // BUG FIX 3: Re-enable toggle immediately when transfer is done
     if (transferModeToggle) transferModeToggle.disabled = false;
     isTransferring = false;
 
-    sendProgressContainer.classList.add("state-success");
-    sendProgressFill.style.width = "100%";
-    sendProgressText.innerText = "100%";
-    setTimeout(() => {
-      sendProgressContainer.classList.add("hidden");
-      sendProgressContainer.classList.remove("state-success");
-      sendFileBtn.disabled = true;
-      document.getElementById("file-selection-form").reset();
-      fileDetails.innerText = "";
-      selectedFiles = [];
-      window.isZippingFolder = false;
-      window.folderTransferMeta = null;
-    }, 3000);
+    if (sendProgressContainer) {
+      sendProgressContainer.classList.add("state-success");
+      sendProgressFill.style.width = "100%";
+      sendProgressText.innerText = "100%";
+      setTimeout(() => {
+        sendProgressContainer.classList.add("hidden");
+        sendProgressContainer.classList.remove("state-success");
+        if (sendFileBtn) sendFileBtn.disabled = true;
+        const form = document.getElementById("file-selection-form");
+        if (form) form.reset();
+        if (fileDetails) fileDetails.innerText = "";
+        selectedFiles = [];
+        window.isZippingFolder = false;
+        window.folderTransferMeta = null;
+      }, 3000);
+    }
     return;
   }
 
   const currentFile = selectedFiles[currentFileIndex];
-  sendProgressContainer.classList.remove("state-error", "state-success");
-  sendProgressFill.classList.add("progress-pulse");
-  sendStatus.innerText = `Sending: ${sanitizeHTML(currentFile.name)} (${
-    currentFileIndex + 1
-  }/${selectedFiles.length})`;
+  if (sendProgressContainer) sendProgressContainer.classList.remove("state-error", "state-success");
+  if (sendProgressFill) sendProgressFill.classList.add("progress-pulse");
+  if (sendStatus) sendStatus.innerText = `Sending: ${sanitizeHTML(currentFile.name)} (${currentFileIndex + 1}/${selectedFiles.length})`;
 
-  // Task 3: Sleep Mode Drop (Sender Side Wakelock)
   requestWakeLock();
 
-  // Read toggle state
   const isFastMode = transferModeToggle ? transferModeToggle.checked : true;
-  if (transferModeToggle) transferModeToggle.disabled = true; // Lock toggle during transfer
+  if (transferModeToggle) transferModeToggle.disabled = true;
 
-  // Send metadata first
   const metadata = {
     command: "FILE_METADATA",
     name: currentFile.name,
@@ -3360,149 +3317,79 @@ function sendNextFile() {
     type: currentFile.type,
     fileIndex: currentFileIndex,
     totalFiles: selectedFiles.length,
-    isFastMode: isFastMode, // Tell receiver our mode
+    isFastMode: isFastMode,
   };
 
-  dataConnection.send(metadata); // Use native object serialization
-
+  dataConnection.send(metadata);
   isWaitingForAccept = true;
-  sendStatus.innerText = `Initializing transfer: ${sanitizeHTML(
-    currentFile.name
-  )}...`;
+  if (sendStatus) sendStatus.innerText = `Initializing transfer: ${sanitizeHTML(currentFile.name)}...`;
 
-  // Send chunks
-  let offset = 0;
-  const fileReader = new FileReader();
-
-  // AIV Initialization
-  let fastHashes = ["", "", ""];
   const totalChunks = Math.ceil(currentFile.size / CHUNK_SIZE);
+  let fastHashes = ["", "", ""];
 
-  // Guard: prevent concurrent FileReader calls (race condition fix)
-  let isFileReading = false;
-
-  fileReader.onload = async (e) => {
-    isFileReading = false; // FileReader is free now
-    if (!dataConnection || !dataConnection.open) return;
-    if (isTransferCancelled) return;
-
-    try {
-      const rawBuffer = e.target.result;
-
-      if (!rawBuffer || rawBuffer.byteLength === 0) {
-        console.warn("Read 0 bytes. Ending chunk loop for this file.");
-        offset = currentFile.size;
-        checkPauseAndRead();
+  const processFileLoop = async () => {
+    let offset = 0;
+    while (offset < currentFile.size && !isTransferCancelled) {
+      if (isCurrentFileSkipped) {
+        isCurrentFileSkipped = false;
+        currentFileIndex++;
+        setTimeout(sendNextFile, 100);
         return;
       }
 
-      // AIV 3-Point Fast Hash Calculation
-      const currentChunkIndex = Math.floor(offset / CHUNK_SIZE);
-      if (isFastMode) {
-        if (currentChunkIndex === 0)
-          fastHashes[0] = await getChunkHash(rawBuffer);
-        else if (currentChunkIndex === Math.floor(totalChunks / 2))
-          fastHashes[1] = await getChunkHash(rawBuffer);
-        else if (currentChunkIndex === totalChunks - 1)
-          fastHashes[2] = await getChunkHash(rawBuffer);
+      if (isPaused || isBackpressurePaused || isWaitingForAccept) {
+        await new Promise(r => setTimeout(r, 50));
+        continue;
       }
 
-      if (isFastMode) {
-        dataConnection.send(rawBuffer);
-        offset += rawBuffer.byteLength;
-        updateSendProgress(offset, currentFile.size);
-        checkPauseAndRead();
-      } else {
-        // Secure Mode: Only encrypt, AES-GCM automatically adds tamper-proof tag!
-        const bufferToSend = await encryptChunk(rawBuffer);
-        if (!isTransferCancelled && dataConnection && dataConnection.open) {
+      // Optimized Backpressure limit (2MB) to maximize throughput while avoiding OS socket overflows
+      if (dataConnection && dataConnection.dataChannel) {
+        if (dataConnection.dataChannel.bufferedAmount > 2097152) {
+          await new Promise(r => setTimeout(r, 2));
+          continue;
+        }
+      }
+
+      try {
+        const slice = currentFile.slice(offset, offset + CHUNK_SIZE);
+        // CRITICAL FIX: Use native arrayBuffer() instead of buggy FileReader
+        const rawBuffer = await slice.arrayBuffer();
+
+        if (!rawBuffer || rawBuffer.byteLength === 0) break;
+
+        const currentChunkIndex = Math.floor(offset / CHUNK_SIZE);
+        if (isFastMode) {
+          if (currentChunkIndex === 0) fastHashes[0] = await getChunkHash(rawBuffer);
+          else if (currentChunkIndex === Math.floor(totalChunks / 2)) fastHashes[1] = await getChunkHash(rawBuffer);
+          else if (currentChunkIndex === totalChunks - 1) fastHashes[2] = await getChunkHash(rawBuffer);
+          dataConnection.send(rawBuffer);
+        } else {
+          const bufferToSend = await encryptChunk(rawBuffer);
           dataConnection.send(bufferToSend);
         }
+
         offset += rawBuffer.byteLength;
         updateSendProgress(offset, currentFile.size);
-        checkPauseAndRead();
-      }
-    } catch (err) {
-      console.error("Chunk processing error:", err);
-    }
-  };
-
-  fileReader.onerror = () => {
-    console.error("FileReader error:", fileReader.error);
-    console.warn("Error reading file");
-  };
-
-  const readSlice = (o) => {
-    if (isFileReading) return; // Guard: never call readAsArrayBuffer when already reading
-    isFileReading = true;
-    const slice = currentFile.slice(o, o + CHUNK_SIZE);
-    fileReader.readAsArrayBuffer(slice);
-  };
-
-  const checkPauseAndRead = () => {
-    if (isTransferCancelled) return;
-    if (isCurrentFileSkipped) {
-      isCurrentFileSkipped = false;
-      currentFileIndex++;
-      window._resumeCheckPauseAndRead = null;
-      if (window._pausePollTimer) {
-        clearTimeout(window._pausePollTimer);
-        window._pausePollTimer = null;
-      }
-      setTimeout(sendNextFile, 100);
-      return;
-    }
-
-    if (isPaused || isBackpressurePaused || isWaitingForAccept) {
-      window._resumeCheckPauseAndRead = checkPauseAndRead;
-      // Use a CANCELLABLE timer — must be cancelled when we resume so it cannot
-      // fire after the file is already complete and re-run the done branch.
-      if (window._pausePollTimer) clearTimeout(window._pausePollTimer);
-      window._pausePollTimer = setTimeout(checkPauseAndRead, 200);
-      return;
-    }
-
-    // ── Resumed / active ─────────────────────────────────────────────────────
-    // Cancel the poll timer immediately — it must NEVER fire after this point
-    // because the file might complete in <200ms and the poll would re-run the
-    // done branch (double FILE_HASH, double addSentFileRow, wrong index advance).
-    if (window._pausePollTimer) {
-      clearTimeout(window._pausePollTimer);
-      window._pausePollTimer = null;
-    }
-    window._resumeCheckPauseAndRead = null;
-
-    // Back-pressure: don't over-fill the WebRTC send buffer
-    if (dataConnection && dataConnection.dataChannel) {
-      dataConnection.dataChannel.bufferedAmountLowThreshold = 1 * 1024 * 1024;
-      if (dataConnection.dataChannel.bufferedAmount > 8 * 1024 * 1024) {
-        dataConnection.dataChannel.onbufferedamountlow = () => {
-          dataConnection.dataChannel.onbufferedamountlow = null;
-          checkPauseAndRead();
-        };
-        return;
+      } catch (err) {
+        console.error("Chunk read/send error:", err);
+        break;
       }
     }
 
-    if (offset < currentFile.size) {
-      readSlice(offset);
-    } else {
-      // Guard: once we've entered the done branch, prevent any re-entry
-      // (e.g. a stale bufferedamountlow callback firing late)
-      if (fileDone) return;
-      fileDone = true;
-
-      // AIV: Send calculated hashes
+    if (!isTransferCancelled && !isCurrentFileSkipped && offset >= currentFile.size) {
       const finalHash = isFastMode ? fastHashes.join("_") : "SECURE_OK";
-      dataConnection.send({ command: "FILE_HASH", hash: finalHash });
+      dataConnection.send({ command: "FILE_DONE", hash: finalHash });
       addSentFileRow(currentFile.name);
-      currentFileIndex++;
-      setTimeout(sendNextFile, 100);
+      
+      // Delay before switching files to allow receiver IPC disk flush (Race Condition Fix)
+      setTimeout(() => {
+        currentFileIndex++;
+        sendNextFile();
+      }, 200);
     }
   };
 
-  let fileDone = false; // Per-file guard: done branch runs exactly once
-  checkPauseAndRead();
+  processFileLoop();
 }
 
 let sendStartTime = 0;
@@ -3844,9 +3731,9 @@ async function sendFolderStream() {
         while (
           !isTransferCancelled &&
           dataConnection.dataChannel &&
-          dataConnection.dataChannel.bufferedAmount > 1 * 1024 * 1024
+          dataConnection.dataChannel.bufferedAmount > 2097152
         ) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          await new Promise((resolve) => setTimeout(resolve, 2));
         }
         if (isTransferCancelled || isCurrentFileSkipped) break;
 

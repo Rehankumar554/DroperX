@@ -112,72 +112,97 @@ function connectMQTT() {
     
     // Generate a random client ID for MQTT
     const clientId = "droperx_" + Math.random().toString(16).substr(2, 8);
-    // Use HiveMQ public broker for better stability across devices
-    const brokerUrl = "wss://broker.hivemq.com:8884/mqtt";
+    // Fallback list of public MQTT brokers for better reliability
+    const brokers = [
+        "wss://broker.hivemq.com:8884/mqtt",
+        "wss://test.mosquitto.org:8081/mqtt",
+        "wss://broker.emqx.io:8084/mqtt"
+    ];
     
-    mqttClient = mqtt.connect(brokerUrl, {
-        clientId: clientId,
-        clean: true,
-        connectTimeout: 10000,
-        reconnectPeriod: 5000,
-        // Last Will and Testament: if we disconnect ungracefully, clear our retained message
-        will: {
-            topic: myTopic,
-            payload: "",
-            qos: 0,
-            retain: true
+    function connectToBroker(index) {
+        if (index >= brokers.length) {
+            console.error("All public MQTT brokers failed to connect.");
+            return;
         }
-    });
-
-    mqttClient.on('connect', () => {
-        console.log("MQTT Connected");
-        // Subscribe to ALL devices on our network
-        mqttClient.subscribe(networkBaseTopic + "/#");
         
-        // If we already have a room open, broadcast it now
-        if (window.currentRoomId && typeof window.broadcastNearbyPresence === 'function') {
-            window.broadcastNearbyPresence(window.currentRoomId, true);
+        const brokerUrl = brokers[index];
+        console.log(`Attempting to connect to MQTT broker: ${brokerUrl}`);
+        
+        if (mqttClient) {
+            // Remove old listeners to prevent cascading fallbacks when we intentionally close it
+            mqttClient.removeAllListeners();
+            mqttClient.end(true); 
         }
-    });
 
-    mqttClient.on('message', (topic, message) => {
-        try {
-            const msgStr = message.toString();
-            if (!msgStr) {
-                // If a subtopic is cleared, extract the deviceId from the topic to remove it from UI
-                const topicParts = topic.split('/');
-                const clearedDeviceId = topicParts[topicParts.length - 1];
-                
-                // Find and remove any peer that has this deviceId
-                // Since we stored roomId in activeNearbyPeers, we should also track deviceId.
-                // Let's just do a reverse lookup if needed, or we can broadcast 'action: closed'
-                // But if it's LWT, it's just an empty string. We'll handle it below.
-                
-                // We need to find which roomId belonged to this deviceId and remove it
-                for (let roomId in activeNearbyPeers) {
-                    if (activeNearbyPeers[roomId].deviceId === clearedDeviceId) {
-                        delete activeNearbyPeers[roomId];
-                        renderNearbyCards();
-                        break;
-                    }
-                }
-                return; 
+        let fallbackTriggered = false;
+        const triggerFallback = () => {
+            if (fallbackTriggered) return;
+            fallbackTriggered = true;
+            connectToBroker(index + 1);
+        };
+
+        mqttClient = mqtt.connect(brokerUrl, {
+            clientId: clientId,
+            clean: true,
+            connectTimeout: 5000,
+            reconnectPeriod: 0, // Disable auto-reconnect, we handle fallback manually
+            will: {
+                topic: myTopic,
+                payload: "",
+                qos: 0,
+                retain: true
             }
-            
-            const payload = JSON.parse(msgStr);
-            handleNearbyMessage(payload, topic);
-        } catch(e) {
-            console.error("Invalid MQTT message", e);
-        }
-    });
+        });
 
-    mqttClient.on('error', (err) => {
-        if (err && err.message && err.message.includes('connack timeout')) {
-            // Public MQTT brokers often timeout. Suppress this to keep console clean.
-            return; 
-        }
-        console.warn("MQTT Connection Error:", err);
-    });
+        mqttClient.on('connect', () => {
+            console.log(`MQTT Connected successfully to ${brokerUrl}`);
+            // Subscribe to ALL devices on our network
+            mqttClient.subscribe(networkBaseTopic + "/#");
+            
+            // If we already have a room open, broadcast it now
+            if (window.currentRoomId && typeof window.broadcastNearbyPresence === 'function') {
+                window.broadcastNearbyPresence(window.currentRoomId, true);
+            }
+        });
+
+        mqttClient.on('error', (err) => {
+            console.warn(`MQTT connection error on ${brokerUrl}:`, err);
+            triggerFallback();
+        });
+
+        mqttClient.on('close', () => {
+            // We only trigger fallback if it wasn't intentionally closed or successful
+            if (!mqttClient.connected) {
+                console.warn(`MQTT connection closed unexpectedly on ${brokerUrl}. Trying next...`);
+                triggerFallback();
+            }
+        });
+
+        mqttClient.on('message', (topic, message) => {
+            try {
+                const msgStr = message.toString();
+                if (!msgStr) {
+                    const topicParts = topic.split('/');
+                    const clearedDeviceId = topicParts[topicParts.length - 1];
+                    for (let roomId in activeNearbyPeers) {
+                        if (activeNearbyPeers[roomId].deviceId === clearedDeviceId) {
+                            delete activeNearbyPeers[roomId];
+                            renderNearbyCards();
+                            break;
+                        }
+                    }
+                    return; 
+                }
+                const payload = JSON.parse(msgStr);
+                handleNearbyMessage(payload, topic);
+            } catch(e) {
+                console.error("Invalid MQTT message", e);
+            }
+        });
+    } // End of connectToBroker
+    
+    // Start the connection process with the first broker
+    connectToBroker(0);
 }
 
 function handleNearbyMessage(payload, topic) {

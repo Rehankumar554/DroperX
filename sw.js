@@ -1,4 +1,4 @@
-const CACHE_NAME = 'droperx-cache-v1';
+const CACHE_NAME = 'droperx-cache-v4';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -27,9 +27,32 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'STREAM_DOWNLOAD') {
-        streamMap.set(event.data.id, event.data.stream);
-        // Reply to main thread so it knows SW is ready to receive the fetch
-        event.ports[0].postMessage({ status: 'READY' });
+        const port = event.ports[0];
+        let streamController = null;
+        
+        const stream = new ReadableStream({
+            start(controller) {
+                streamController = controller;
+            },
+            cancel() {
+                port.postMessage({ type: 'CANCEL' });
+            }
+        });
+
+        port.onmessage = (e) => {
+            if (e.data.type === 'WRITE') {
+                if (streamController) streamController.enqueue(e.data.chunk);
+                // Send ACK for backpressure windowing
+                port.postMessage({ type: 'ACK' });
+            } else if (e.data.type === 'CLOSE') {
+                if (streamController) streamController.close();
+            } else if (e.data.type === 'ABORT') {
+                if (streamController) streamController.error('Aborted');
+            }
+        };
+
+        streamMap.set(event.data.id, { stream: stream, size: event.data.size });
+        port.postMessage({ status: 'READY' });
     }
 });
 
@@ -43,17 +66,22 @@ self.addEventListener('fetch', (event) => {
         const id = streamPath[0];
         const filename = decodeURIComponent(streamPath[1] || 'download');
 
-        const stream = streamMap.get(id);
+        const streamData = streamMap.get(id);
         
-        if (stream) {
+        if (streamData && streamData.stream) {
             streamMap.delete(id);
             const headers = new Headers({
                 'Content-Type': 'application/octet-stream',
                 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
                 'Content-Security-Policy': "default-src 'none'",
-                'X-Content-Type-Options': 'nosniff'
+                'X-Content-Type-Options': 'nosniff',
+                'Accept-Ranges': 'none',
+                'Content-Length': streamData.size.toString(),
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             });
-            event.respondWith(new Response(stream, { headers }));
+            event.respondWith(new Response(streamData.stream, { headers }));
             return;
         } else {
             event.respondWith(new Response("Stream not found or expired", { status: 404 }));
